@@ -40,8 +40,10 @@ gestion_compras_obras/
 ├── remitos.php             # Control y recepción de remitos físicos
 ├── facturas.php            # Carga y seguimiento de facturación
 ├── exportar_excel.php      # Generador de reportes Excel (.xls)
-├── db.php                  # Conexión a la base de datos (PDO)
-├── db.example.php          # Plantilla de configuración de la base de datos
+├── bootstrap.php           # Arranque común: errores, conexión, login y CSRF
+├── db.example.php          # Plantilla de configuración (copiar como db.php, que NO va a git)
+├── expedientes.php         # Control de Expedientes físicos
+├── migraciones/            # Cambios de estructura de la base (ver LEEME.md)
 ├── desplegar.php           # Script de despliegue automático por FTP
 ├── schema.sql              # Estructura limpia de la base de datos
 └── README.md               # Documentación del proyecto
@@ -66,15 +68,22 @@ gestion_compras_obras/
 
 ---
 
-## 🔐 Usuario y clave (informe de datos y pantallas nuevas)
+## 🔐 Seguridad: usuario, clave y configuración
 
-Una sola vez, desde una consola en la carpeta del sistema:
+Todo el sistema pide login (un solo usuario). Las contraseñas **no están en el código**:
 
-```bash
-php crear_usuario.php
-```
+1. Copiá `db.example.php` como `db.php` y completá los datos de la base. `db.php` está en `.gitignore` y **nunca se sube a git**.
+2. Generá tu clave cifrada, desde una consola en la carpeta del sistema: `php crear_usuario.php`.
+   Pegá las dos líneas que muestra (`AUTH_USUARIO` y `AUTH_HASH`) en `db.php`.
+3. Para el despliegue por FTP, copiá `desplegar_config.example.php` como `desplegar_config.php` y completá tus datos.
+4. Los errores técnicos se guardan en `logs/app.log` (no se muestran en pantalla).
 
-Crea `auth_config.php` (clave cifrada, no se sube a git). Luego entrá por `login.php`.
+Todos los formularios y los enlaces de eliminar / cambiar estado llevan un token CSRF.
+
+## 🗂️ Control de Expedientes
+
+Pantalla **Control de Expedientes**: tablero por obra (expediente, n.º de concurso, OC/facturas/remitos verificados contra el papel), avance por año y buscador.
+Requiere aplicar `migraciones/002_expedientes.sql` (ver `migraciones/LEEME.md`).
 
 ---
 

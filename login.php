@@ -1,12 +1,13 @@
 <?php
-require_once 'auth.php';
+define('SIN_LOGIN', true);
+require_once 'bootstrap.php';
 
 $error = '';
 
 // Dónde volver después de entrar: solo páginas propias (nada de URLs externas).
-$volver = isset($_GET['volver']) ? (string)$_GET['volver'] : 'informe_datos.php';
+$volver = isset($_GET['volver']) ? (string)$_GET['volver'] : 'index.php';
 if (!preg_match('/^[a-z_]+\.php(\?[A-Za-z0-9_=&%.\-]*)?$/', $volver)) {
-    $volver = 'informe_datos.php';
+    $volver = 'index.php';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

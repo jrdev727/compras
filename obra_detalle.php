@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $obra_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "Material añadido a la solicitud original de la obra.";
                 $msg_type = "success";
             } catch (\PDOException $e) {
-                $message = "Error al añadir material: " . $e->getMessage();
+                $message = error_generico($e, "Error al añadir material");
                 $msg_type = "danger";
             }
         } else {
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "El remito físico ha sido conciliado y registrado correctamente.";
                 $msg_type = "success";
             } catch (\PDOException $e) {
-                $message = "Error al actualizar el remito: " . $e->getMessage();
+                $message = error_generico($e, "Error al actualizar el remito");
                 $msg_type = "danger";
             }
         } else {
@@ -479,6 +479,7 @@ require_once 'header.php';
                                     <?php if ($es_faltante): ?>
                                         <!-- Formulario rápido para resolver remito pendiente -->
                                         <form action="obra_detalle.php?id=<?= $obra_id ?>" method="POST" class="d-flex gap-2" style="justify-content: flex-end; align-items: flex-end;">
+        <?= csrf_campo() ?>
                                             <input type="hidden" name="action" value="resolver_remito">
                                             <input type="hidden" name="remito_id" value="<?= $remito['id'] ?>">
                                             <div class="form-group" style="text-align: left;">
@@ -538,6 +539,7 @@ require_once 'header.php';
             <div id="form-rapido-material" style="display: none; border: 1px solid var(--gray-300); border-radius: var(--border-radius-sm); padding: 1.25rem; margin-bottom: 1.5rem; background-color: #fafafa;">
                 <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem;">Cargar Material Adicional a la Solicitud</h4>
                 <form action="obra_detalle.php?id=<?= $obra_id ?>" method="POST">
+        <?= csrf_campo() ?>
                     <input type="hidden" name="action" value="agregar_material">
                     <div class="form-grid">
                         <div class="form-group" style="grid-column: span 2;">

@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $action = "listar";
             } catch (\PDOException $e) {
                 $pdo->rollBack();
-                $message = "Error al guardar la compra: " . $e->getMessage();
+                $message = error_generico($e, "Error al guardar la compra");
                 $msg_type = "danger";
                 $action = "nuevo";
             }
@@ -213,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $action = "listar";
             } catch (\PDOException $e) {
                 $pdo->rollBack();
-                $message = "Error al actualizar la compra: " . $e->getMessage();
+                $message = error_generico($e, "Error al actualizar la compra");
                 $msg_type = "danger";
                 $action = "editar";
             }
@@ -230,7 +230,7 @@ if ($action === 'eliminar') {
         $message = "La orden de compra fue eliminada.";
         $msg_type = "success";
     } catch (\PDOException $e) {
-        $message = "Error al eliminar: " . $e->getMessage();
+        $message = error_generico($e, "Error al eliminar");
         $msg_type = "danger";
     }
     $action = "listar";
@@ -337,7 +337,7 @@ require_once 'header.php';
                                                 <a href="compras.php?action=editar&id=<?= $c['id'] ?>" class="btn btn-secondary btn-sm" title="Editar">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                                 </a>
-                                                <a href="compras.php?action=eliminar&id=<?= $c['id'] ?>" class="btn btn-danger btn-sm" onclick="return confirm('¿Está seguro de eliminar esta orden de compra? Se eliminarán también las facturas y los remitos vinculados.');" title="Eliminar">
+                                                <a href="compras.php?action=eliminar&id=<?= $c['id'] ?><?= csrf_url() ?>" class="btn btn-danger btn-sm" onclick="return confirm('¿Está seguro de eliminar esta orden de compra? Se eliminarán también las facturas y los remitos vinculados.');" title="Eliminar">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                                                 </a>
                                             </div>
@@ -563,6 +563,7 @@ require_once 'header.php';
     </script>
 
     <form action="compras.php?action=guardar_nuevo" method="POST">
+        <?= csrf_campo() ?>
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Datos Generales del Contrato / Compra</h3>
@@ -701,6 +702,7 @@ require_once 'header.php';
     </div>
 
     <form action="compras.php?action=guardar_editar" method="POST">
+        <?= csrf_campo() ?>
         <input type="hidden" name="compra_id" value="<?= $compra['id'] ?>">
         
         <div class="card">
@@ -757,7 +759,7 @@ require_once 'header.php';
                                     <option value="">-- No vincular --</option>
                                     <?php foreach ($materiales_obra as $mat): ?>
                                         <option value="<?= $mat['id'] ?>" <?= ($item['material_solicitado_id'] == $mat['id']) ? 'selected' : '' ?> data-unidad="<?= htmlspecialchars($mat['unidad']) ?>">
-                                            <?= htmlspecialchars($mat['descripcion']) ?> (Solicitado: <?= $mat['cantidad'] ?> <?= $mat['unidad'] ?>)
+                                            <?= htmlspecialchars($mat['descripcion']) ?> (Solicitado: <?= htmlspecialchars($mat['cantidad']) ?> <?= htmlspecialchars($mat['unidad']) ?>)
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -843,7 +845,7 @@ require_once 'header.php';
                             <option value="">-- No vincular --</option>
                             <?php foreach ($materiales_obra as $mat): ?>
                                 <option value="<?= $mat['id'] ?>" data-unidad="<?= htmlspecialchars($mat['unidad']) ?>">
-                                    <?= htmlspecialchars($mat['descripcion']) ?> (Solicitado: <?= $mat['cantidad'] ?> <?= $mat['unidad'] ?>)
+                                    <?= htmlspecialchars($mat['descripcion']) ?> (Solicitado: <?= htmlspecialchars($mat['cantidad']) ?> <?= htmlspecialchars($mat['unidad']) ?>)
                                 </option>
                             <?php endforeach; ?>
                         `;

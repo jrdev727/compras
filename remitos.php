@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
             $action = "listar";
         } catch (\PDOException $e) {
             $pdo->rollBack();
-            $message = "Error al guardar el remito: " . $e->getMessage();
+            $message = error_generico($e, "Error al guardar el remito");
             $msg_type = "danger";
             $action = "nuevo";
         }
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'resolver_rapido') {
             $message = "Remito conciliado correctamente.";
             $msg_type = "success";
         } catch (\PDOException $e) {
-            $message = "Error: " . $e->getMessage();
+            $message = error_generico($e, "Error");
             $msg_type = "danger";
         }
     } else {
@@ -98,7 +98,7 @@ if ($action === 'eliminar') {
         $message = "El remito y sus cantidades entregadas fueron eliminadas.";
         $msg_type = "success";
     } catch (\PDOException $e) {
-        $message = "Error al eliminar remito: " . $e->getMessage();
+        $message = error_generico($e, "Error al eliminar remito");
         $msg_type = "danger";
     }
     $action = "listar";
@@ -241,6 +241,7 @@ require_once 'header.php';
                                                         <?php if ($es_pendiente): ?>
                                                             <!-- Resolver rápido inline -->
                                                             <form action="remitos.php?action=resolver_rapido" method="POST" class="d-flex gap-2 justify-center">
+        <?= csrf_campo() ?>
                                                                 <input type="hidden" name="id" value="<?= $r['id'] ?>">
                                                                 <input type="text" name="nro_remito" class="form-control" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; width: 110px;" placeholder="Nro Remito" required>
                                                                 <button type="submit" class="btn btn-primary btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Guardar</button>
@@ -248,7 +249,7 @@ require_once 'header.php';
                                                         <?php else: ?>
                                                             <div class="d-flex gap-2 justify-center">
                                                                 <a href="obra_detalle.php?id=<?= $r['obra_id'] ?>#remitos" class="btn btn-secondary btn-sm" style="flex-grow: 1;">Ver Detalle</a>
-                                                                <a href="remitos.php?action=eliminar&id=<?= $r['id'] ?>" class="btn btn-danger btn-sm" onclick="return confirm('¿Eliminar esta entrega de materiales? Se descontará del stock de la obra.');">
+                                                                <a href="remitos.php?action=eliminar&id=<?= $r['id'] ?><?= csrf_url() ?>" class="btn btn-danger btn-sm" onclick="return confirm('¿Eliminar esta entrega de materiales? Se descontará del stock de la obra.');">
                                                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                                                                 </a>
                                                             </div>
@@ -447,6 +448,7 @@ require_once 'header.php';
     </script>
 
     <form action="remitos.php?action=guardar_nuevo" method="POST">
+        <?= csrf_campo() ?>
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Datos del Remito y Recepción</h3>

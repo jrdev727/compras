@@ -1,23 +1,16 @@
 <?php
-// Plantilla de Configuración de Base de Datos
-// Renombrar este archivo a db.php y completar las credenciales correspondientes.
+// PLANTILLA de configuración. Copiala como db.php y completá los datos.
+// db.php NO se sube a git (está en .gitignore): ahí van las contraseñas reales.
+// La conexión y el manejo de errores están en bootstrap.php.
 
-$host = 'localhost';          // Host de la base de datos (ej: localhost o sqlXXX.infinityfree.com)
-$db   = 'gestion_obras';      // Nombre de la base de datos
-$user = 'root';               // Usuario de la base de datos
-$pass = '';                   // Contraseña de la base de datos
+// Para XAMPP local normalmente: host 'localhost', db 'gestion_obras', user 'root', pass ''.
+$host    = 'localhost';
+$db      = 'gestion_obras';
+$user    = 'root';
+$pass    = '';
 $charset = 'utf8mb4';
 
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-
-try {
-     $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-     die("<h3>Error de conexión a la base de datos</h3><p>Detalle: {$e->getMessage()}</p>");
-}
-?>
+// Usuario y clave (cifrada) para entrar al sistema.
+// Para generarlos, ejecutá en una consola:  php crear_usuario.php   y pegá acá las dos líneas que muestra.
+define('AUTH_USUARIO', '');
+define('AUTH_HASH', '');

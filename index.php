@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $message = '';
 $msg_type = 'success';
@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $message = "El remito físico ha sido conciliado y registrado correctamente.";
             $msg_type = "success";
         } catch (\PDOException $e) {
-            $message = "Error al conciliar el remito: " . $e->getMessage();
+            $message = error_generico($e, "Error al conciliar el remito");
             $msg_type = "danger";
         }
     } else {
@@ -255,6 +255,7 @@ require_once 'header.php';
                                     </td>
                                     <td style="background-color: rgba(224, 231, 255, 0.2); vertical-align: middle;">
                                         <form action="index.php" method="POST" class="d-flex gap-2 justify-center" style="margin: 0; align-items: center;">
+        <?= csrf_campo() ?>
                                             <input type="hidden" name="action" value="resolver_rapido">
                                             <input type="hidden" name="id" value="<?= $r['id'] ?>">
                                             <input type="text" name="nro_remito" class="form-control" style="padding: 0.35rem 0.6rem; font-size: 0.8rem; width: 140px; border-radius: var(--border-radius-sm); border-color: var(--primary-light);" placeholder="Nro Remito Físico" required>

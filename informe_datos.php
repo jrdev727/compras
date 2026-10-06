@@ -1,9 +1,7 @@
 <?php
 // INFORME DE CALIDAD DE DATOS - Solo lectura: no modifica nada en la base.
-require_once 'auth.php';
-auth_requerir();
+require_once 'bootstrap.php';
 require_once 'validaciones.php';
-require_once 'db.php';
 
 // ------------------------------------------------------------------ carga de datos
 $obras = [];

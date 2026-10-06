@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS `obras` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `nombre` VARCHAR(255) NOT NULL,
     `expediente` VARCHAR(100) NOT NULL UNIQUE,
+    `nro_concurso` VARCHAR(50) NOT NULL UNIQUE, -- N.º de concurso de precios (migraciones 002/003)
     `descripcion` TEXT NULL,
     `estado` ENUM('Planificación', 'Activa', 'Pausada', 'Finalizada') DEFAULT 'Planificación',
     `fecha_creacion` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS `compras` (
     `proveedor` VARCHAR(255) NOT NULL,
     `fecha_compra` DATE NOT NULL,
     `estado` ENUM('Adjudicado', 'Entregado Parcial', 'Entregado Completo', 'Cancelado') DEFAULT 'Adjudicado',
+    `verificado_en` DATE NULL, -- Fecha de verificación contra el papel (NULL = no verificado)
     FOREIGN KEY (`obra_id`) REFERENCES `obras`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -54,6 +56,7 @@ CREATE TABLE IF NOT EXISTS `facturas` (
     `fecha_factura` DATE NOT NULL,
     `monto` DECIMAL(15, 2) NOT NULL,
     `estado` ENUM('Pendiente', 'Aprobada', 'Pagada') DEFAULT 'Pendiente',
+    `verificado_en` DATE NULL, -- Fecha de verificación contra el papel
     FOREIGN KEY (`compra_id`) REFERENCES `compras`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -66,6 +69,7 @@ CREATE TABLE IF NOT EXISTS `remitos` (
     `estado_remito` ENUM('Recibido', 'Pendiente de Remito Físico', 'Reclamado') DEFAULT 'Recibido',
     `recibido_por` VARCHAR(255) NULL,
     `observaciones` TEXT NULL,
+    `verificado_en` DATE NULL, -- Fecha de verificación contra el papel
     FOREIGN KEY (`obra_id`) REFERENCES `obras`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

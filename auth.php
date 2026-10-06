@@ -20,15 +20,16 @@ function h($valor): string
     return htmlspecialchars((string)$valor, ENT_QUOTES, 'UTF-8');
 }
 
-/** Lee la configuración del usuario (la crea crear_usuario.php). null si no existe. */
+/** Acciones por URL (GET) que modifican datos: exigen token CSRF en el enlace. */
+const ACCIONES_GET_PROTEGIDAS = ['eliminar', 'cambiar_estado'];
+
+/** Usuario y hash de clave: se definen en db.php (AUTH_USUARIO y AUTH_HASH). null si faltan. */
 function auth_config(): ?array
 {
-    $ruta = __DIR__ . '/auth_config.php';
-    if (!is_file($ruta)) {
-        return null;
+    if (defined('AUTH_USUARIO') && defined('AUTH_HASH') && AUTH_USUARIO !== '' && AUTH_HASH !== '') {
+        return ['usuario' => AUTH_USUARIO, 'hash' => AUTH_HASH];
     }
-    $cfg = require $ruta;
-    return (is_array($cfg) && !empty($cfg['usuario']) && !empty($cfg['hash'])) ? $cfg : null;
+    return null;
 }
 
 function auth_usuario(): ?string
@@ -98,6 +99,21 @@ function csrf_valido(): bool
 {
     $enviado = $_POST['csrf'] ?? '';
     return is_string($enviado) && !empty($_SESSION['csrf']) && hash_equals($_SESSION['csrf'], $enviado);
+}
+
+/** Token CSRF para enlaces: se agrega a la URL como &csrf=... */
+function csrf_url(): string
+{
+    return '&csrf=' . rawurlencode(csrf_token());
+}
+
+function csrf_exigir_get(): void
+{
+    $enviado = $_GET['csrf'] ?? '';
+    if (!is_string($enviado) || empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $enviado)) {
+        http_response_code(400);
+        exit('Enlace no válido o vencido. Volvé atrás, recargá la página e intentá de nuevo.');
+    }
 }
 
 /** Corta la ejecución si el token CSRF de un POST no es válido. */

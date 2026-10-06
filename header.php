@@ -71,6 +71,14 @@ $current_page = basename($_SERVER['SCRIPT_NAME']);
                     <span>Facturas</span>
                 </a>
 
+                <a href="expedientes.php" class="sidebar-link <?= ($current_page == 'expedientes.php') ? 'active' : '' ?>">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <path d="m9 14 2 2 4-4"/>
+                    </svg>
+                    <span>Control de Expedientes</span>
+                </a>
+
                 <a href="informe_datos.php" class="sidebar-link <?= ($current_page == 'informe_datos.php') ? 'active' : '' ?>">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M9 11l3 3L22 4"/>
@@ -81,6 +89,11 @@ $current_page = basename($_SERVER['SCRIPT_NAME']);
             </nav>
             
             <div class="sidebar-footer">
+                <form method="POST" action="login.php" style="margin: 0 0 .75rem;">
+                    <?= csrf_campo() ?>
+                    <input type="hidden" name="accion" value="salir">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%;">Salir (<?= h(auth_usuario()) ?>)</button>
+                </form>
                 <p>Módulo de Compras v1.0</p>
                 <p>Municipalidad Local</p>
             </div>

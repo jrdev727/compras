@@ -1,8 +1,15 @@
 <?php
 // Script de despliegue automático por FTP a InfinityFree
-$ftp_server = "ftpupload.net";
-$ftp_user   = "if0_42355456";
-$ftp_pass   = "F11c13w27s30";
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('Este script solo se puede ejecutar desde la consola.');
+}
+
+// Los datos del FTP están en desplegar_config.php (no se sube a git; ver desplegar_config.example.php).
+if (!is_file(__DIR__ . '/desplegar_config.php')) {
+    die("Falta desplegar_config.php (copiá desplegar_config.example.php y completá los datos).\n");
+}
+require __DIR__ . '/desplegar_config.php';
 $remote_dir = "htdocs";
 
 echo "Iniciando despliegue automático a InfinityFree...\n";
@@ -62,7 +69,7 @@ function upload_directory($conn_id, $local_dir, $remote_sub_dir = "") {
             $ext = pathinfo($file, PATHINFO_EXTENSION);
             if (in_array($ext, ['php', 'css', 'js', 'png', 'jpg', 'jpeg', 'svg', 'ico'])) {
                 // No subir el propio script de despliegue
-                if ($file === 'desplegar.php') {
+                if (in_array($file, ['desplegar.php', 'desplegar_config.php', 'desplegar_config.example.php', 'crear_usuario.php', 'db.example.php'], true)) {
                     continue;
                 }
                 

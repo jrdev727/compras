@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $obra_id = isset($_GET['obra_id']) ? intval($_GET['obra_id']) : 0;
 

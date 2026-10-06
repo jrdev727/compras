@@ -5,8 +5,14 @@ temp_zip/
 scratch/
 proyecto_gestion_obras/
 db_backup.sql
+*.sql.bak
 
-# Archivos de entorno y logs
+# Configuración con contraseñas (NUNCA subir): usar db.example.php / desplegar_config.example.php como plantilla
+db.php
+desplegar_config.php
+
+# Logs de errores técnicos
+logs/
 *.log
 
 # Archivos del sistema operativo y editores
@@ -14,6 +20,3 @@ db_backup.sql
 Thumbs.db
 .vscode/
 .idea/
-
-# Usuario/clave del sistema (hash)
-auth_config.php

@@ -1,7 +1,15 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
+
+/** Devuelve la obra que ya usa ese n.º de concurso (distinta de $excluir_id), o false si está libre. */
+function concurso_en_uso(PDO $pdo, string $nro_concurso, int $excluir_id)
+{
+    $st = $pdo->prepare("SELECT nombre, expediente FROM obras WHERE nro_concurso = ? AND id <> ? LIMIT 1");
+    $st->execute([$nro_concurso, $excluir_id]);
+    return $st->fetch();
+}
 $message = '';
 $msg_type = 'success';
 
@@ -10,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'guardar_nuevo') {
         $nombre = trim($_POST['nombre']);
         $expediente = trim($_POST['expediente']);
+        $nro_concurso = trim($_POST['nro_concurso'] ?? '');
         $descripcion = trim($_POST['descripcion']);
         $estado = $_POST['estado'];
         $materiales = isset($_POST['materiales']) ? $_POST['materiales'] : [];
@@ -18,13 +27,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "El nombre y número de expediente son obligatorios.";
             $msg_type = "danger";
             $action = "nuevo";
+        } elseif ($nro_concurso === '' || mb_strlen($nro_concurso) > 50) {
+            $message = "El número de concurso de precios es obligatorio (hasta 50 caracteres).";
+            $msg_type = "danger";
+            $action = "nuevo";
+        } elseif ($otra = concurso_en_uso($pdo, $nro_concurso, 0)) {
+            $message = "El número de concurso \"$nro_concurso\" ya está cargado en la obra \"{$otra['nombre']}\" (expediente {$otra['expediente']}). Cada concurso debe ser único.";
+            $msg_type = "danger";
+            $action = "nuevo";
         } else {
             try {
                 $pdo->beginTransaction();
 
                 // 1. Insertar Obra
-                $stmt = $pdo->prepare("INSERT INTO obras (nombre, expediente, descripcion, estado) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$nombre, $expediente, $descripcion, $estado]);
+                $stmt = $pdo->prepare("INSERT INTO obras (nombre, expediente, nro_concurso, descripcion, estado) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$nombre, $expediente, $nro_concurso, $descripcion, $estado]);
                 $obra_id = $pdo->lastInsertId();
 
                 // 2. Insertar Materiales Solicitados
@@ -49,9 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (\PDOException $e) {
                 $pdo->rollBack();
                 if ($e->getCode() == 23000) { // Duplicate entry for unique key
-                    $message = "Error: El número de expediente ya está registrado en otra obra.";
+                    $message = "Error: El número de expediente o de concurso ya está registrado en otra obra.";
                 } else {
-                    $message = "Error al guardar la obra: " . $e->getMessage();
+                    $message = error_generico($e, "Error al guardar la obra");
                 }
                 $msg_type = "danger";
                 $action = "nuevo";
@@ -63,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = intval($_POST['id']);
         $nombre = trim($_POST['nombre']);
         $expediente = trim($_POST['expediente']);
+        $nro_concurso = trim($_POST['nro_concurso'] ?? '');
         $descripcion = trim($_POST['descripcion']);
         $estado = $_POST['estado'];
         $materiales = isset($_POST['materiales']) ? $_POST['materiales'] : [];
@@ -71,13 +89,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "El nombre y número de expediente son obligatorios.";
             $msg_type = "danger";
             $action = "editar";
+        } elseif ($nro_concurso === '' || mb_strlen($nro_concurso) > 50) {
+            $message = "El número de concurso de precios es obligatorio (hasta 50 caracteres).";
+            $msg_type = "danger";
+            $action = "editar";
+        } elseif ($otra = concurso_en_uso($pdo, $nro_concurso, $id)) {
+            $message = "El número de concurso \"$nro_concurso\" ya está cargado en la obra \"{$otra['nombre']}\" (expediente {$otra['expediente']}). Cada concurso debe ser único.";
+            $msg_type = "danger";
+            $action = "editar";
         } else {
             try {
                 $pdo->beginTransaction();
 
                 // 1. Actualizar datos de la obra
-                $stmt = $pdo->prepare("UPDATE obras SET nombre = ?, expediente = ?, descripcion = ?, estado = ? WHERE id = ?");
-                $stmt->execute([$nombre, $expediente, $descripcion, $estado, $id]);
+                $stmt = $pdo->prepare("UPDATE obras SET nombre = ?, expediente = ?, nro_concurso = ?, descripcion = ?, estado = ? WHERE id = ?");
+                $stmt->execute([$nombre, $expediente, $nro_concurso, $descripcion, $estado, $id]);
 
                 // 2. Gestionar listado de materiales
                 $stmtGetIds = $pdo->prepare("SELECT id FROM materiales_solicitados WHERE obra_id = ?");
@@ -131,9 +157,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (\PDOException $e) {
                 $pdo->rollBack();
                 if ($e->getCode() == 23000) {
-                    $message = "Error: El número de expediente ya está registrado en otra obra.";
+                    $message = "Error: El número de expediente o de concurso ya está registrado en otra obra.";
                 } else {
-                    $message = "Error al actualizar la obra: " . $e->getMessage();
+                    $message = error_generico($e, "Error al actualizar la obra");
                 }
                 $msg_type = "danger";
                 $action = "editar";
@@ -151,7 +177,7 @@ if ($action === 'eliminar') {
         $message = "La obra fue eliminada correctamente del sistema.";
         $msg_type = "success";
     } catch (\PDOException $e) {
-        $message = "Error al eliminar la obra: " . $e->getMessage();
+        $message = error_generico($e, "Error al eliminar la obra");
         $msg_type = "danger";
     }
     $action = "listar";
@@ -237,6 +263,8 @@ require_once 'header.php';
                                                 <div style="display: flex; gap: 1rem; font-size: 0.8rem; color: var(--text-secondary); align-items: center; flex-wrap: wrap;">
                                                     <span><strong>Expediente:</strong> <?= htmlspecialchars($o['expediente']) ?></span>
                                                     <span style="color: var(--gray-300);">|</span>
+                                                    <span><strong>Concurso:</strong> <?= ($o['nro_concurso'] ?? '') !== '' ? htmlspecialchars($o['nro_concurso']) : '<span class="badge badge-danger">Falta completar</span>' ?></span>
+                                                    <span style="color: var(--gray-300);">|</span>
                                                     <span><strong>Materiales:</strong> <?= $o['cant_materiales'] ?> ítems</span>
                                                     <span style="color: var(--gray-300);">|</span>
                                                     <span><strong>Compras:</strong> <?= $o['cant_compras'] ?> órdenes</span>
@@ -249,7 +277,7 @@ require_once 'header.php';
                                                 <a href="obras.php?action=editar&id=<?= $o['id'] ?>" class="btn btn-secondary btn-sm" style="padding: 0.4rem;" title="Editar">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                                 </a>
-                                                <a href="obras.php?action=eliminar&id=<?= $o['id'] ?>" class="btn btn-danger btn-sm" style="padding: 0.4rem;" onclick="return confirm('¿Está seguro de eliminar esta obra? Se borrarán todos los materiales, compras y remitos asociados.');" title="Eliminar">
+                                                <a href="obras.php?action=eliminar&id=<?= $o['id'] ?><?= csrf_url() ?>" class="btn btn-danger btn-sm" style="padding: 0.4rem;" onclick="return confirm('¿Está seguro de eliminar esta obra? Se borrarán todos los materiales, compras y remitos asociados.');" title="Eliminar">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                                                 </a>
                                             </div>
@@ -277,6 +305,7 @@ require_once 'header.php';
     </div>
 
     <form action="obras.php?action=guardar_nuevo" method="POST">
+        <?= csrf_campo() ?>
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Datos del Expediente y Obra</h3>
@@ -290,6 +319,10 @@ require_once 'header.php';
                     <div class="form-group">
                         <label class="form-label">Nro Expediente *</label>
                         <input type="text" name="expediente" class="form-control" placeholder="Ej. EXP-2026-9045" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">N.º de Concurso de Precios *</label>
+                        <input type="text" name="nro_concurso" class="form-control" maxlength="50" placeholder="Ej. 12/2026" value="<?= htmlspecialchars($_POST['nro_concurso'] ?? '') ?>" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Estado Inicial</label>
@@ -398,6 +431,7 @@ require_once 'header.php';
     </div>
 
     <form action="obras.php?action=guardar_editar" method="POST">
+        <?= csrf_campo() ?>
         <input type="hidden" name="id" value="<?= $obra['id'] ?>">
         
         <div class="card">
@@ -413,6 +447,10 @@ require_once 'header.php';
                     <div class="form-group">
                         <label class="form-label">Nro Expediente *</label>
                         <input type="text" name="expediente" class="form-control" value="<?= htmlspecialchars($obra['expediente']) ?>" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">N.º de Concurso de Precios *</label>
+                        <input type="text" name="nro_concurso" class="form-control" maxlength="50" value="<?= htmlspecialchars($obra['nro_concurso'] ?? '') ?>" placeholder="Falta completar" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Estado</label>

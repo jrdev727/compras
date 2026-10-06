@@ -1,5 +1,5 @@
 <?php
-require_once 'db.php';
+require_once 'bootstrap.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
             $msg_type = "success";
             $action = "listar";
         } catch (\PDOException $e) {
-            $message = "Error al guardar la factura: " . $e->getMessage();
+            $message = error_generico($e, "Error al guardar la factura");
             $msg_type = "danger";
             $action = "nuevo";
         }
@@ -47,7 +47,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'cambiar_estado') {
             $message = "Estado de la factura actualizado correctamente.";
             $msg_type = "success";
         } catch (\PDOException $e) {
-            $message = "Error al actualizar estado: " . $e->getMessage();
+            $message = error_generico($e, "Error al actualizar estado");
             $msg_type = "danger";
         }
     }
@@ -63,7 +63,7 @@ if ($action === 'eliminar') {
         $message = "La factura fue eliminada del sistema.";
         $msg_type = "success";
     } catch (\PDOException $e) {
-        $message = "Error al eliminar factura: " . $e->getMessage();
+        $message = error_generico($e, "Error al eliminar factura");
         $msg_type = "danger";
     }
     $action = "listar";
@@ -190,17 +190,17 @@ require_once 'header.php';
                                                     <td class="text-center">
                                                         <div class="d-flex gap-2 justify-center" style="align-items: center;">
                                                             <?php if ($f['estado'] !== 'Pagada'): ?>
-                                                                <a href="facturas.php?action=cambiar_estado&id=<?= $f['id'] ?>&estado=Pagada" class="btn btn-secondary btn-sm" style="background-color: var(--success-light); color: var(--success-dark);" title="Marcar como Pagada">
+                                                                <a href="facturas.php?action=cambiar_estado&id=<?= $f['id'] ?>&estado=Pagada<?= csrf_url() ?>" class="btn btn-secondary btn-sm" style="background-color: var(--success-light); color: var(--success-dark);" title="Marcar como Pagada">
                                                                     Pagar
                                                                 </a>
                                                             <?php endif; ?>
                                                             <?php if ($f['estado'] === 'Pendiente'): ?>
-                                                                <a href="facturas.php?action=cambiar_estado&id=<?= $f['id'] ?>&estado=Aprobada" class="btn btn-secondary btn-sm" style="background-color: var(--info-light); color: var(--info-dark);" title="Aprobar Factura">
+                                                                <a href="facturas.php?action=cambiar_estado&id=<?= $f['id'] ?>&estado=Aprobada<?= csrf_url() ?>" class="btn btn-secondary btn-sm" style="background-color: var(--info-light); color: var(--info-dark);" title="Aprobar Factura">
                                                                     Aprobar
                                                                 </a>
                                                             <?php endif; ?>
                                                             
-                                                            <a href="facturas.php?action=eliminar&id=<?= $f['id'] ?>" class="btn btn-danger btn-sm" onclick="return confirm('¿Está seguro de eliminar esta factura?');">
+                                                            <a href="facturas.php?action=eliminar&id=<?= $f['id'] ?><?= csrf_url() ?>" class="btn btn-danger btn-sm" onclick="return confirm('¿Está seguro de eliminar esta factura?');">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                                                             </a>
                                                         </div>
@@ -261,6 +261,7 @@ require_once 'header.php';
     </div>
 
     <form action="facturas.php?action=guardar_nuevo" method="POST">
+        <?= csrf_campo() ?>
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Datos Comerciales de la Factura</h3>
