@@ -66,6 +66,18 @@ gestion_compras_obras/
 
 ---
 
+## 🔐 Usuario y clave (informe de datos y pantallas nuevas)
+
+Una sola vez, desde una consola en la carpeta del sistema:
+
+```bash
+php crear_usuario.php
+```
+
+Crea `auth_config.php` (clave cifrada, no se sube a git). Luego entrá por `login.php`.
+
+---
+
 ## 🌐 Despliegue en Servidor Remoto (Ej: InfinityFree)
 
 1. Crear la base de datos MySQL en el panel de hosting e importar `schema.sql` (o un respaldo de datos).
