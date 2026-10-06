@@ -1,0 +1,16 @@
+# Archivos temporales, zips y volcados de base de datos local
+*.zip
+*.tar.gz
+temp_zip/
+scratch/
+proyecto_gestion_obras/
+db_backup.sql
+
+# Archivos de entorno y logs
+*.log
+
+# Archivos del sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
