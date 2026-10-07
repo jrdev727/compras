@@ -23,16 +23,26 @@ CREATE TABLE IF NOT EXISTS `materiales_solicitados` (
     FOREIGN KEY (`obra_id`) REFERENCES `obras`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 2b. Tabla de Proveedores (migración 004)
+CREATE TABLE IF NOT EXISTS `proveedores` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `razon_social` VARCHAR(255) NOT NULL,
+    `creado_en` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_proveedores_razon_social` (`razon_social`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 3. Tabla de Compras / Presupuestos Adjudicados
 CREATE TABLE IF NOT EXISTS `compras` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `obra_id` INT NOT NULL,
     `nro_compra` VARCHAR(100) NOT NULL, -- Nro de Orden de Compra o Licitación
     `proveedor` VARCHAR(255) NOT NULL,
+    `proveedor_id` INT NULL, -- Proveedor (migración 004). `proveedor` es el texto viejo, se conserva hasta confirmar
     `fecha_compra` DATE NOT NULL,
     `estado` ENUM('Adjudicado', 'Entregado Parcial', 'Entregado Completo', 'Cancelado') DEFAULT 'Adjudicado',
     `verificado_en` DATE NULL, -- Fecha de verificación contra el papel (NULL = no verificado)
-    FOREIGN KEY (`obra_id`) REFERENCES `obras`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`obra_id`) REFERENCES `obras`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_compras_proveedor` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4. Detalle de Compras (Items Adjudicados)
@@ -52,12 +62,14 @@ CREATE TABLE IF NOT EXISTS `compra_detalles` (
 CREATE TABLE IF NOT EXISTS `facturas` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `compra_id` INT NOT NULL,
+    `proveedor_id` INT NULL, -- Se copia de la OC (migración 004)
     `nro_factura` VARCHAR(100) NOT NULL,
     `fecha_factura` DATE NOT NULL,
     `monto` DECIMAL(15, 2) NOT NULL,
     `estado` ENUM('Pendiente', 'Aprobada', 'Pagada') DEFAULT 'Pendiente',
     `verificado_en` DATE NULL, -- Fecha de verificación contra el papel
-    FOREIGN KEY (`compra_id`) REFERENCES `compras`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`compra_id`) REFERENCES `compras`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_facturas_proveedor` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6. Tabla de Remitos (Cabecera)

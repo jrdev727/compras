@@ -43,6 +43,8 @@ gestion_compras_obras/
 ├── bootstrap.php           # Arranque común: errores, conexión, login y CSRF
 ├── db.example.php          # Plantilla de configuración (copiar como db.php, que NO va a git)
 ├── expedientes.php         # Control de Expedientes físicos
+├── proveedores.php         # Lista de proveedores (alta y corrección de nombre)
+├── migrar_proveedores.php  # Migración guiada de los proveedores escritos en las OC
 ├── migraciones/            # Cambios de estructura de la base (ver LEEME.md)
 ├── desplegar.php           # Script de despliegue automático por FTP
 ├── schema.sql              # Estructura limpia de la base de datos

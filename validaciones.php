@@ -4,6 +4,11 @@
 
 const ANIO_MIN = 2000;
 
+/** Error de validación de negocio: su mensaje está pensado para mostrarse tal cual al usuario. */
+class ErrorValidacion extends RuntimeException
+{
+}
+
 /** Año máximo aceptado para una fecha (el año que viene, por si se carga por adelantado). */
 function anio_max(): int
 {

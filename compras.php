@@ -1,11 +1,17 @@
 <?php
 require_once 'bootstrap.php';
+require_once 'validaciones.php';
+require_once 'proveedores_lib.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
 $msg_type = 'success';
 
-// Obtener todos los proveedores distintos registrados previamente en compras
+// ¿Se usa la lista de proveedores (migración hecha) o todavía el campo de texto de siempre?
+$usa_prov = proveedores_activo($pdo);
+$lista_prov = $usa_prov ? proveedores_listar($pdo) : [];
+
+// Modo texto: proveedores distintos registrados previamente en compras (para sugerir)
 try {
     $prov_stmt = $pdo->query("SELECT DISTINCT proveedor FROM compras WHERE proveedor IS NOT NULL AND proveedor != '' ORDER BY proveedor ASC");
     $proveedores_existentes = $prov_stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -18,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'guardar_nuevo') {
         $obra_id = intval($_POST['obra_id']);
         $nro_compra = trim($_POST['nro_compra']);
-        $proveedor = trim($_POST['proveedor']);
+        $proveedor = $usa_prov ? trim($_POST['proveedor_id'] ?? '') : trim($_POST['proveedor'] ?? '');
         $fecha_compra = $_POST['fecha_compra'];
         $items = isset($_POST['items']) ? $_POST['items'] : [];
 
@@ -31,8 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();
 
                 // 1. Insertar Cabecera de Compra
-                $stmt = $pdo->prepare("INSERT INTO compras (obra_id, nro_compra, proveedor, fecha_compra, estado) VALUES (?, ?, ?, ?, 'Adjudicado')");
-                $stmt->execute([$obra_id, $nro_compra, $proveedor, $fecha_compra]);
+                if ($usa_prov) {
+                    $prov = proveedor_resolver($pdo, $_POST);   // crea el proveedor si se eligió "agregar nuevo"
+                    $stmt = $pdo->prepare("INSERT INTO compras (obra_id, nro_compra, proveedor, proveedor_id, fecha_compra, estado) VALUES (?, ?, ?, ?, ?, 'Adjudicado')");
+                    $stmt->execute([$obra_id, $nro_compra, $prov['razon_social'], $prov['id'], $fecha_compra]);
+                } else {
+                    $stmt = $pdo->prepare("INSERT INTO compras (obra_id, nro_compra, proveedor, fecha_compra, estado) VALUES (?, ?, ?, ?, 'Adjudicado')");
+                    $stmt->execute([$obra_id, $nro_compra, $proveedor, $fecha_compra]);
+                }
                 $compra_id = $pdo->lastInsertId();
 
                 // 2. Insertar Detalles de Compra
@@ -67,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             if (($cantidad_comprada + $cant_ya_comprada) > $cant_solicitada) {
                                 $disponible = $cant_solicitada - $cant_ya_comprada;
-                                throw new \PDOException("La cantidad a comprar de '" . $desc_original . "' (" . $cantidad_comprada . ") supera el saldo pendiente de la solicitud original. Disponible para comprar: " . $disponible);
+                                throw new ErrorValidacion("La cantidad a comprar de '" . $desc_original . "' (" . $cantidad_comprada . ") supera el saldo pendiente de la solicitud original. Disponible para comprar: " . $disponible);
                             }
 
                             $stmtUnit = $pdo->prepare("SELECT unidad FROM materiales_solicitados WHERE id = ?");
@@ -90,6 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "La orden de compra se registró con éxito.";
                 $msg_type = "success";
                 $action = "listar";
+            } catch (ErrorValidacion $e) {
+                $pdo->rollBack();
+                $message = $e->getMessage();
+                $msg_type = "danger";
+                $action = "nuevo";
             } catch (\PDOException $e) {
                 $pdo->rollBack();
                 $message = error_generico($e, "Error al guardar la compra");
@@ -102,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'guardar_editar') {
         $compra_id = intval($_POST['compra_id']);
         $nro_compra = trim($_POST['nro_compra']);
-        $proveedor = trim($_POST['proveedor']);
+        $proveedor = $usa_prov ? trim($_POST['proveedor_id'] ?? '') : trim($_POST['proveedor'] ?? '');
         $fecha_compra = $_POST['fecha_compra'];
         $items = isset($_POST['items']) ? $_POST['items'] : [];
 
@@ -115,8 +132,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();
 
                 // 1. Actualizar Cabecera
-                $stmt = $pdo->prepare("UPDATE compras SET nro_compra = ?, proveedor = ?, fecha_compra = ? WHERE id = ?");
-                $stmt->execute([$nro_compra, $proveedor, $fecha_compra, $compra_id]);
+                if ($usa_prov) {
+                    $prov = proveedor_resolver($pdo, $_POST);
+                    $stmt = $pdo->prepare("UPDATE compras SET nro_compra = ?, proveedor = ?, proveedor_id = ?, fecha_compra = ? WHERE id = ?");
+                    $stmt->execute([$nro_compra, $prov['razon_social'], $prov['id'], $fecha_compra, $compra_id]);
+                    // Las facturas de esta OC siguen al proveedor de la OC
+                    $pdo->prepare("UPDATE facturas SET proveedor_id = ? WHERE compra_id = ?")->execute([$prov['id'], $compra_id]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE compras SET nro_compra = ?, proveedor = ?, fecha_compra = ? WHERE id = ?");
+                    $stmt->execute([$nro_compra, $proveedor, $fecha_compra, $compra_id]);
+                }
 
                 // 2. Gestionar Items (Insertar / Actualizar / Eliminar)
                 $stmtGetIds = $pdo->prepare("SELECT id FROM compra_detalles WHERE compra_id = ?");
@@ -160,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             if (($cantidad_comprada + $cant_ya_comprada) > $cant_solicitada) {
                                 $disponible = $cant_solicitada - $cant_ya_comprada;
-                                throw new \PDOException("La cantidad a comprar de '" . $desc_original . "' (" . $cantidad_comprada . ") supera el saldo pendiente de la solicitud original. Disponible para comprar: " . $disponible);
+                                throw new ErrorValidacion("La cantidad a comprar de '" . $desc_original . "' (" . $cantidad_comprada . ") supera el saldo pendiente de la solicitud original. Disponible para comprar: " . $disponible);
                             }
 
                             $stmtUnit = $pdo->prepare("SELECT unidad FROM materiales_solicitados WHERE id = ?");
@@ -211,6 +236,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "La orden de compra ha sido actualizada correctamente.";
                 $msg_type = "success";
                 $action = "listar";
+            } catch (ErrorValidacion $e) {
+                $pdo->rollBack();
+                $message = $e->getMessage();
+                $msg_type = "danger";
+                $action = "editar";
             } catch (\PDOException $e) {
                 $pdo->rollBack();
                 $message = error_generico($e, "Error al actualizar la compra");
@@ -593,7 +623,11 @@ require_once 'header.php';
                     </div>
                     <div class="form-group">
                         <label class="form-label">Proveedor Adjudicado *</label>
-                        <input type="text" name="proveedor" class="form-control" list="proveedores-list" placeholder="Ej. Corralón Central S.A." required>
+                        <?php if ($usa_prov): ?>
+                            <?= campo_proveedor($lista_prov, $_POST['proveedor_id'] ?? '', $_POST['proveedor_nuevo'] ?? '') ?>
+                        <?php else: ?>
+                            <input type="text" name="proveedor" class="form-control" list="proveedores-list" placeholder="Ej. Corralón Central S.A." required>
+                        <?php endif; ?>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Fecha de Compra / Adjudicación *</label>
@@ -722,7 +756,11 @@ require_once 'header.php';
                     </div>
                     <div class="form-group">
                         <label class="form-label">Proveedor Adjudicado *</label>
-                        <input type="text" name="proveedor" class="form-control" list="proveedores-list" value="<?= htmlspecialchars($compra['proveedor']) ?>" required>
+                        <?php if ($usa_prov): ?>
+                            <?= campo_proveedor($lista_prov, $_POST['proveedor_id'] ?? ($compra['proveedor_id'] ?? ''), $_POST['proveedor_nuevo'] ?? '') ?>
+                        <?php else: ?>
+                            <input type="text" name="proveedor" class="form-control" list="proveedores-list" value="<?= htmlspecialchars($compra['proveedor']) ?>" required>
+                        <?php endif; ?>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Fecha de Compra / Adjudicación *</label>

@@ -1,5 +1,6 @@
 <?php
 require_once 'bootstrap.php';
+require_once 'proveedores_lib.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
@@ -19,11 +20,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
         $action = "nuevo";
     } else {
         try {
-            $stmt = $pdo->prepare("
-                INSERT INTO facturas (compra_id, nro_factura, fecha_factura, monto, estado) 
-                VALUES (?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([$compra_id, $nro_factura, $fecha_factura, $monto, $estado]);
+            if (proveedores_estructura_lista($pdo)) {
+                // El proveedor de la factura se copia de su OC
+                $stmt = $pdo->prepare("
+                    INSERT INTO facturas (compra_id, proveedor_id, nro_factura, fecha_factura, monto, estado)
+                    VALUES (?, (SELECT proveedor_id FROM compras WHERE id = ?), ?, ?, ?, ?)
+                ");
+                $stmt->execute([$compra_id, $compra_id, $nro_factura, $fecha_factura, $monto, $estado]);
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO facturas (compra_id, nro_factura, fecha_factura, monto, estado)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$compra_id, $nro_factura, $fecha_factura, $monto, $estado]);
+            }
             $message = "La factura se registró correctamente en el sistema.";
             $msg_type = "success";
             $action = "listar";
