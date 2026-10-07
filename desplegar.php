@@ -68,8 +68,9 @@ function upload_directory($conn_id, $local_dir, $remote_sub_dir = "") {
             // Excluir archivos innecesarios de base de datos o instaladores del despliegue público
             $ext = pathinfo($file, PATHINFO_EXTENSION);
             if (in_array($ext, ['php', 'css', 'js', 'png', 'jpg', 'jpeg', 'svg', 'ico'])) {
+                // db.php (contraseñas de la base y usuario) NUNCA se sube: el del servidor se edita allí.
                 // No subir el propio script de despliegue
-                if (in_array($file, ['desplegar.php', 'desplegar_config.php', 'desplegar_config.example.php', 'crear_usuario.php', 'db.example.php'], true)) {
+                if (in_array($file, ['desplegar.php', 'desplegar_config.php', 'desplegar_config.example.php', 'crear_usuario.php', 'db.example.php', 'db.php'], true)) {
                     continue;
                 }
                 
