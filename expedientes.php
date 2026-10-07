@@ -63,7 +63,7 @@ unset($_SESSION['flash']);
 $q       = trim((string)($_GET['q'] ?? ''));
 $obra_id = (int)($_GET['obra'] ?? 0);
 $anio    = (int)($_GET['anio'] ?? 0);          // 0 = todos los años
-$volver_actual = 'expedientes.php' . ($_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
+$volver_actual = 'expedientes.php' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '');
 $volver_actual = volver_seguro($volver_actual);
 
 /** Formulario chico de verificación para una fila. */

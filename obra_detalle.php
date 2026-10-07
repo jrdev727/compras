@@ -1,5 +1,6 @@
 <?php
 require_once 'bootstrap.php';
+require_once 'reglas_db.php';
 
 $obra_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -38,6 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = error_generico($e, "Error al añadir material");
                 $msg_type = "danger";
             }
+        } elseif (!empty($descripcion) && $cantidad <= 0) {
+            $message = "La cantidad del material «{$descripcion}» debe ser mayor que cero.";
+            $msg_type = "danger";
         } else {
             $message = "Complete todos los campos del material.";
             $msg_type = "danger";
@@ -51,10 +55,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (!empty($nro_remito)) {
             try {
+                validar_conciliar_remito($pdo, $remito_id, $nro_remito);
                 $stmt = $pdo->prepare("UPDATE remitos SET nro_remito = ?, estado_remito = 'Recibido' WHERE id = ? AND obra_id = ?");
                 $stmt->execute([$nro_remito, $remito_id, $obra_id]);
                 $message = "El remito físico ha sido conciliado y registrado correctamente.";
                 $msg_type = "success";
+            } catch (ErrorValidacion $e) {
+                $message = $e->getMessage();
+                $msg_type = "danger";
             } catch (\PDOException $e) {
                 $message = error_generico($e, "Error al actualizar el remito");
                 $msg_type = "danger";

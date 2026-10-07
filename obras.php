@@ -1,5 +1,6 @@
 <?php
 require_once 'bootstrap.php';
+require_once 'reglas_db.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 
@@ -29,6 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = "nuevo";
         } elseif ($nro_concurso === '' || mb_strlen($nro_concurso) > 50) {
             $message = "El número de concurso de precios es obligatorio (hasta 50 caracteres).";
+            $msg_type = "danger";
+            $action = "nuevo";
+        } elseif ($err_mat = materiales_error($materiales)) {
+            $message = $err_mat;
             $msg_type = "danger";
             $action = "nuevo";
         } elseif ($otra = concurso_en_uso($pdo, $nro_concurso, 0)) {
@@ -91,6 +96,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = "editar";
         } elseif ($nro_concurso === '' || mb_strlen($nro_concurso) > 50) {
             $message = "El número de concurso de precios es obligatorio (hasta 50 caracteres).";
+            $msg_type = "danger";
+            $action = "editar";
+        } elseif ($err_mat = materiales_error($materiales)) {
+            $message = $err_mat;
             $msg_type = "danger";
             $action = "editar";
         } elseif ($otra = concurso_en_uso($pdo, $nro_concurso, $id)) {
@@ -463,7 +472,7 @@ require_once 'header.php';
                     </div>
                     <div class="form-group full-width">
                         <label class="form-label">Descripción o Destino de la Obra</label>
-                        <textarea name="descripcion" class="form-control" rows="3"><?= htmlspecialchars($obra['descripcion']) ?></textarea>
+                        <textarea name="descripcion" class="form-control" rows="3"><?= htmlspecialchars($obra['descripcion'] ?? '') ?></textarea>
                     </div>
                 </div>
             </div>

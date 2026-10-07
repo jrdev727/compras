@@ -87,6 +87,18 @@ Todos los formularios y los enlaces de eliminar / cambiar estado llevan un token
 Pantalla **Control de Expedientes**: tablero por obra (expediente, n.º de concurso, OC/facturas/remitos verificados contra el papel), avance por año y buscador.
 Requiere aplicar `migraciones/002_expedientes.sql` (ver `migraciones/LEEME.md`).
 
+## ✅ Reglas de validación (el servidor bloquea el guardado)
+
+| Documento | Regla |
+|-----------|-------|
+| OC | Número `AAAA-NNNN` (ej. `2025-0001`), único en todo el sistema. Si el año del número no coincide con el de la fecha, solo muestra una advertencia |
+| Factura | Número ARCA: punto de venta de 4 o 5 dígitos, guion y 8 dígitos (ej. `00001-00001234`). Único por proveedor |
+| Remito | Formato libre. No se repite el mismo número para el mismo proveedor (se deduce de los ítems) |
+| Todos | Cantidades, precios y montos mayores que cero; fechas válidas |
+| Fechas | Fecha OC ≤ fecha factura; fecha remito ≥ fecha de la OC de sus ítems (la misma fecha se permite). Al editar la fecha de una OC se revisa contra sus facturas y remitos |
+
+Las reglas están en `validaciones.php` (formatos) y `reglas_db.php` (las que consultan la base).
+
 ---
 
 ## 🌐 Despliegue en Servidor Remoto (Ej: InfinityFree)

@@ -1,6 +1,7 @@
 <?php
 require_once 'bootstrap.php';
 require_once 'proveedores_lib.php';
+require_once 'reglas_db.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
@@ -14,12 +15,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
     $monto = floatval($_POST['monto']);
     $estado = $_POST['estado'];
 
-    if ($compra_id <= 0 || empty($nro_factura) || empty($fecha_factura) || $monto <= 0) {
+    if ($compra_id <= 0 || empty($nro_factura) || empty($fecha_factura) || trim((string)$_POST['monto']) === '') {
         $message = "La orden de compra, número de factura, fecha y monto son campos obligatorios.";
         $msg_type = "danger";
         $action = "nuevo";
     } else {
         try {
+            // Validaciones del servidor: formato ARCA, único por proveedor, monto > 0, fecha >= fecha de la OC
+            validar_factura($pdo, $compra_id, $nro_factura, (string)$fecha_factura, $_POST['monto']);
+
             if (proveedores_estructura_lista($pdo)) {
                 // El proveedor de la factura se copia de su OC
                 $stmt = $pdo->prepare("
@@ -37,6 +41,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
             $message = "La factura se registró correctamente en el sistema.";
             $msg_type = "success";
             $action = "listar";
+        } catch (ErrorValidacion $e) {
+            $message = $e->getMessage();
+            $msg_type = "danger";
+            $action = "nuevo";
         } catch (\PDOException $e) {
             $message = error_generico($e, "Error al guardar la factura");
             $msg_type = "danger";

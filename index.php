@@ -1,5 +1,6 @@
 <?php
 require_once 'bootstrap.php';
+require_once 'reglas_db.php';
 
 $message = '';
 $msg_type = 'success';
@@ -11,10 +12,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     if ($id > 0 && !empty($nro_remito)) {
         try {
+            validar_conciliar_remito($pdo, $id, $nro_remito);
             $stmt = $pdo->prepare("UPDATE remitos SET nro_remito = ?, estado_remito = 'Recibido' WHERE id = ?");
             $stmt->execute([$nro_remito, $id]);
             $message = "El remito físico ha sido conciliado y registrado correctamente.";
             $msg_type = "success";
+        } catch (ErrorValidacion $e) {
+            $message = $e->getMessage();
+            $msg_type = "danger";
         } catch (\PDOException $e) {
             $message = error_generico($e, "Error al conciliar el remito");
             $msg_type = "danger";

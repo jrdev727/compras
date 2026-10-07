@@ -1,6 +1,6 @@
 <?php
 require_once 'bootstrap.php';
-require_once 'validaciones.php';
+require_once 'reglas_db.php';
 require_once 'proveedores_lib.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
@@ -35,6 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $pdo->beginTransaction();
+
+                // 0. Validaciones del servidor (si algo falla no se guarda nada)
+                validar_items_oc($items);
+                $advertencias = validar_oc($pdo, $nro_compra, $fecha_compra);
 
                 // 1. Insertar Cabecera de Compra
                 if ($usa_prov) {
@@ -99,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $pdo->commit();
-                $message = "La orden de compra se registró con éxito.";
+                $message = "La orden de compra se registró con éxito." . ($advertencias ? ' ' . implode(' ', $advertencias) : '');
                 $msg_type = "success";
                 $action = "listar";
             } catch (ErrorValidacion $e) {
@@ -131,14 +135,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->beginTransaction();
 
+                // 0. Validaciones del servidor (si algo falla no se guarda nada)
+                validar_items_oc($items);
+                $advertencias = validar_oc($pdo, $nro_compra, $fecha_compra, $compra_id);
+                // Al cambiar la fecha se revisa contra las facturas y remitos vinculados
+                validar_fecha_oc_vs_vinculados($pdo, $compra_id, $nro_compra, $fecha_compra);
+
                 // 1. Actualizar Cabecera
                 if ($usa_prov) {
                     $prov = proveedor_resolver($pdo, $_POST);
+                    validar_cambio_proveedor_oc($pdo, $compra_id, $prov['razon_social']);
                     $stmt = $pdo->prepare("UPDATE compras SET nro_compra = ?, proveedor = ?, proveedor_id = ?, fecha_compra = ? WHERE id = ?");
                     $stmt->execute([$nro_compra, $prov['razon_social'], $prov['id'], $fecha_compra, $compra_id]);
                     // Las facturas de esta OC siguen al proveedor de la OC
                     $pdo->prepare("UPDATE facturas SET proveedor_id = ? WHERE compra_id = ?")->execute([$prov['id'], $compra_id]);
                 } else {
+                    validar_cambio_proveedor_oc($pdo, $compra_id, $proveedor);
                     $stmt = $pdo->prepare("UPDATE compras SET nro_compra = ?, proveedor = ?, fecha_compra = ? WHERE id = ?");
                     $stmt->execute([$nro_compra, $proveedor, $fecha_compra, $compra_id]);
                 }
@@ -233,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $pdo->commit();
-                $message = "La orden de compra ha sido actualizada correctamente.";
+                $message = "La orden de compra ha sido actualizada correctamente." . ($advertencias ? ' ' . implode(' ', $advertencias) : '');
                 $msg_type = "success";
                 $action = "listar";
             } catch (ErrorValidacion $e) {

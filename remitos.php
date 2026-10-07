@@ -1,5 +1,6 @@
 <?php
 require_once 'bootstrap.php';
+require_once 'reglas_db.php';
 
 $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
@@ -30,6 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
         try {
             $pdo->beginTransaction();
 
+            // 0. Validaciones del servidor: fecha, cantidades > 0, fecha >= OC de los ítems, número no repetido por proveedor
+            validar_remito($pdo, $db_nro_remito, (string)$fecha_entrega, $items);
+
             // 1. Insertar Cabecera de Remito
             $stmt = $pdo->prepare("
                 INSERT INTO remitos (obra_id, nro_remito, fecha_entrega, estado_remito, recibido_por, observaciones) 
@@ -58,6 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
             $message = "La entrega y descarga de materiales se registró correctamente.";
             $msg_type = "success";
             $action = "listar";
+        } catch (ErrorValidacion $e) {
+            $pdo->rollBack();
+            $message = $e->getMessage();
+            $msg_type = "danger";
+            $action = "nuevo";
         } catch (\PDOException $e) {
             $pdo->rollBack();
             $message = error_generico($e, "Error al guardar el remito");
@@ -74,10 +83,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'resolver_rapido') {
     
     if ($id > 0 && !empty($nro_remito)) {
         try {
+            validar_conciliar_remito($pdo, $id, $nro_remito);
             $stmt = $pdo->prepare("UPDATE remitos SET nro_remito = ?, estado_remito = 'Recibido' WHERE id = ?");
             $stmt->execute([$nro_remito, $id]);
             $message = "Remito conciliado correctamente.";
             $msg_type = "success";
+        } catch (ErrorValidacion $e) {
+            $message = $e->getMessage();
+            $msg_type = "danger";
         } catch (\PDOException $e) {
             $message = error_generico($e, "Error");
             $msg_type = "danger";
