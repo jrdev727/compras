@@ -7,6 +7,100 @@ $action = isset($_GET['action']) ? $_GET['action'] : 'listar';
 $message = '';
 $msg_type = 'success';
 
+/**
+ * Panel "Total de la OC" que se recalcula en vivo mientras se cargan los ítems (alta y edición).
+ * Solo ayuda a verificar: no se guarda nada y el servidor vuelve a validar todo al guardar.
+ */
+function panel_total_oc(string $id_contenedor): string
+{
+    ob_start(); ?>
+                <div id="resumen-oc" style="margin-top: 1.5rem; padding: 1rem 1.25rem; border: 1px solid var(--border-color); border-radius: 8px; background-color: var(--card-bg);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary);">Total de la OC (<span id="total-items">0</span> ítem(s) incluido(s))</div>
+                            <div id="total-oc" style="font-size: 1.7rem; font-weight: 700;">$ 0,00</div>
+                        </div>
+                        <div>
+                            <label class="form-label" for="total-esperado">Verificar contra el total del papel (opcional, no se guarda)</label>
+                            <input type="text" id="total-esperado" class="form-control" inputmode="decimal" autocomplete="off" placeholder="Ej. 1.250.000,00" style="max-width: 260px;">
+                        </div>
+                    </div>
+                    <div id="total-aviso" style="margin-top: 0.75rem; font-size: 0.9rem;"></div>
+                </div>
+                <script>
+                (function () {
+                    const cont = document.getElementById('<?= $id_contenedor ?>');
+                    const elTotal = document.getElementById('total-oc');
+                    const elItems = document.getElementById('total-items');
+                    const elAviso = document.getElementById('total-aviso');
+                    const elEsperado = document.getElementById('total-esperado');
+                    const fmt = c => '$ ' + (c / 100).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                    // Acepta "1.250.000,50", "1250000.50" o "1250000"
+                    function leerMonto(txt) {
+                        let t = String(txt).replace(/[\s$]/g, '');
+                        if (t === '') return null;
+                        if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+                        else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+                        const n = parseFloat(t);
+                        return isNaN(n) ? NaN : Math.round(n * 100);
+                    }
+
+                    function recalcular() {
+                        let total = 0, items = 0, incompletos = 0, excedidos = 0;
+                        cont.querySelectorAll('.dynamic-item-row').forEach(row => {
+                            const chk = row.querySelector('input[type="checkbox"]');
+                            const q = row.querySelector('input[name$="[cantidad_comprada]"]');
+                            const p = row.querySelector('input[name$="[precio_unitario]"]');
+                            let sub = row.querySelector('.subtotal-fila');
+                            if (!sub && p) {
+                                sub = document.createElement('div');
+                                sub.className = 'subtotal-fila';
+                                sub.style.cssText = 'font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;';
+                                p.parentElement.appendChild(sub);
+                            }
+                            if (sub) sub.textContent = '';
+                            if (!chk || !chk.checked) return;
+                            items++;
+                            const qv = parseFloat(q && q.value), pv = parseFloat(p && p.value);
+                            if (!(qv > 0) || !(pv > 0)) { incompletos++; return; }
+                            const max = parseFloat(q.max);
+                            if (!isNaN(max) && qv > max + 0.0001) excedidos++;
+                            const cent = Math.round(Math.round(qv * 100) * Math.round(pv * 100) / 100);
+                            total += cent;
+                            if (sub) sub.textContent = 'Subtotal: ' + fmt(cent);
+                        });
+                        elTotal.textContent = fmt(total);
+                        elItems.textContent = items;
+
+                        const avisos = [];
+                        if (incompletos > 0) avisos.push('<span style="color: var(--danger-dark);">⚠ ' + incompletos + ' ítem(s) sin cantidad o sin precio mayor que cero.</span>');
+                        if (excedidos > 0) avisos.push('<span style="color: var(--danger-dark);">⚠ ' + excedidos + ' ítem(s) con cantidad mayor a lo pendiente de la solicitud.</span>');
+                        const esperado = leerMonto(elEsperado.value);
+                        if (esperado !== null) {
+                            if (isNaN(esperado)) {
+                                avisos.push('<span style="color: var(--danger-dark);">⚠ No se entiende el total ingresado.</span>');
+                            } else if (esperado === total) {
+                                avisos.push('<span style="color: var(--success-dark);">✔ El total coincide con el del papel.</span>');
+                            } else {
+                                const dif = total - esperado;
+                                avisos.push('<span style="color: var(--danger-dark);">⚠ No coincide con el papel: diferencia de ' + (dif > 0 ? '+' : '−') + fmt(Math.abs(dif)) + ' (la OC suma ' + fmt(total) + ' y el papel dice ' + fmt(esperado) + ').</span>');
+                            }
+                        }
+                        elAviso.innerHTML = avisos.join('<br>');
+                    }
+
+                    ['input', 'change'].forEach(ev => cont.addEventListener(ev, recalcular));
+                    elEsperado.addEventListener('input', recalcular);
+                    new MutationObserver(recalcular).observe(cont, {childList: true});
+                    document.addEventListener('DOMContentLoaded', recalcular);
+                    recalcular();
+                })();
+                </script>
+<?php
+    return ob_get_clean();
+}
+
 // ¿Se usa la lista de proveedores (migración hecha) o todavía el campo de texto de siempre?
 $usa_prov = proveedores_activo($pdo);
 $lista_prov = $usa_prov ? proveedores_listar($pdo) : [];
@@ -547,6 +641,8 @@ require_once 'header.php';
                     <p style="color: var(--text-secondary); font-size: 0.9rem; padding: 1rem; text-align: center;">Seleccione una obra para cargar sus materiales automáticamente.</p>
                 </div>
 
+<?= panel_total_oc('dynamic-compra-items') ?>
+
                 <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
                     <a href="compras.php" class="btn btn-secondary" onclick="if(document.referrer && !document.referrer.includes(window.location.pathname)) { window.history.back(); return false; }">Cancelar</a>
                     <button type="submit" class="btn btn-primary">
@@ -836,6 +932,8 @@ require_once 'header.php';
                     });
                 </script>
                 
+<?= panel_total_oc('dynamic-compra-items-edit') ?>
+
                 <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
                     <a href="compras.php" class="btn btn-secondary" onclick="if(document.referrer && !document.referrer.includes(window.location.pathname)) { window.history.back(); return false; }">Cancelar</a>
                     <button type="submit" class="btn btn-primary">Guardar Cambios</button>
