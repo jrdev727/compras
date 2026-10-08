@@ -143,28 +143,31 @@ function materiales_error(array $materiales): ?string
 // ------------------------------------------------------------------ Orden de compra
 
 /**
- * Valida número y fecha de una OC (alta o edición). $excluir_id = la propia OC al editar.
+ * Valida número y fecha de una OC (alta o edición). El número es libre: solo se controla que no se repita. $excluir_id = la propia OC al editar.
  * Devuelve una lista de ADVERTENCIAS (no bloquean).
  */
 function validar_oc(PDO $pdo, string $nro, string $fecha, int $excluir_id = 0): array
 {
-    if (!oc_formato_valido($nro)) {
-        throw new ErrorValidacion("El número de OC «{$nro}» no es válido. Debe tener el formato AAAA-NNNN: año de 4 dígitos, guion y número de 4 dígitos (ejemplo: 2025-0001).");
+    if (!numero_documento_ok($nro)) {
+        throw new ErrorValidacion('El número de OC es obligatorio y puede tener hasta 100 caracteres.');
     }
     if (!fecha_valida($fecha)) {
         throw new ErrorValidacion("La fecha de la OC $nro no es válida («{$fecha}»). Usá una fecha real entre " . ANIO_MIN . ' y ' . anio_max() . '.');
     }
-    $st = $pdo->prepare("
-        SELECT c.nro_compra, c.proveedor, c.fecha_compra, o.expediente
+    // Único en todo el sistema (2025-1 y 2025-0001 cuentan como el mismo número)
+    $clave = oc_clave($nro);
+    $st = $pdo->query("
+        SELECT c.id, c.nro_compra, c.proveedor, c.fecha_compra, o.expediente
         FROM compras c JOIN obras o ON o.id = c.obra_id
-        WHERE c.nro_compra = ? AND c.id <> ? LIMIT 1
     ");
-    $st->execute([$nro, $excluir_id]);
-    if ($otra = $st->fetch()) {
-        throw new ErrorValidacion("El número de OC $nro ya existe en el sistema: pertenece a la OC de «{$otra['proveedor']}» del " . fmt_fecha($otra['fecha_compra']) . " (obra {$otra['expediente']}). Cada OC debe tener un número único.");
+    foreach ($st as $otra) {
+        if ((int)$otra['id'] !== $excluir_id && oc_clave($otra['nro_compra']) === $clave) {
+            $igual = trim($otra['nro_compra']) === trim($nro) ? '' : " (figura como «{$otra['nro_compra']}»)";
+            throw new ErrorValidacion("El número de OC $nro ya existe en el sistema$igual: pertenece a la OC de «{$otra['proveedor']}» del " . fmt_fecha($otra['fecha_compra']) . " (obra {$otra['expediente']}). Cada OC debe tener un número único.");
+        }
     }
     $adv = [];
-    if (oc_anio($nro) !== (int)substr($fecha, 0, 4)) {
+    if (oc_anio($nro) !== null && oc_anio($nro) !== (int)substr($fecha, 0, 4)) {
         $adv[] = 'Advertencia: el número ' . $nro . ' indica el año ' . oc_anio($nro) . ' pero la fecha de la OC es ' . fmt_fecha($fecha) . '. Se guardó igual; revisá que sea correcto.';
     }
     return $adv;
@@ -231,8 +234,8 @@ function validar_factura(PDO $pdo, int $compra_id, string $nro, string $fecha, $
     if (!($oc = $st->fetch())) {
         throw new ErrorValidacion('La orden de compra elegida no existe.');
     }
-    if (!factura_arca_valida($nro)) {
-        throw new ErrorValidacion("El número de factura «{$nro}» no cumple la nomenclatura ARCA: punto de venta de 4 o 5 dígitos, guion y número de 8 dígitos (ejemplo: 00001-00001234).");
+    if (!numero_documento_ok($nro)) {
+        throw new ErrorValidacion('El número de factura es obligatorio y puede tener hasta 100 caracteres.');
     }
     if (!fecha_valida($fecha)) {
         throw new ErrorValidacion("La fecha de la factura $nro no es válida («{$fecha}»). Usá una fecha real entre " . ANIO_MIN . ' y ' . anio_max() . '.');

@@ -600,7 +600,7 @@ require_once 'header.php';
                     </div>
                     <div class="form-group">
                         <label class="form-label">Número de Orden de Compra (OC) *</label>
-                        <input type="text" name="nro_compra" class="form-control" placeholder="Ej. OC-2026-0045" required>
+                        <input type="text" name="nro_compra" class="form-control" placeholder="Ej. 2026-45" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Proveedor Adjudicado *</label>

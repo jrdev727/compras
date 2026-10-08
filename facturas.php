@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nuevo') {
         $action = "nuevo";
     } else {
         try {
-            // Validaciones del servidor: formato ARCA, único por proveedor, monto > 0, fecha >= fecha de la OC
+            // Validaciones del servidor: número no repetido por proveedor, monto > 0, fecha >= fecha de la OC
             validar_factura($pdo, $compra_id, $nro_factura, (string)$fecha_factura, $_POST['monto']);
 
             if (proveedores_estructura_lista($pdo)) {
@@ -300,7 +300,7 @@ require_once 'header.php';
 
                     <div class="form-group">
                         <label class="form-label">Número de Factura *</label>
-                        <input type="text" name="nro_factura" class="form-control" placeholder="Ej. 0005-00124578" required>
+                        <input type="text" name="nro_factura" class="form-control" placeholder="Tal como figura en la factura. Ej. 5-124578" required>
                     </div>
 
                     <div class="form-group">

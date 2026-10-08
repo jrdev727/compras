@@ -36,8 +36,7 @@ $CATEGORIAS = [
     'rem_fecha'     => ['c', 'Remito con fecha anterior a la OC de sus ítems', 'error'],
     'cantidad'      => ['d', 'Cantidades, precios o montos menores o iguales a cero', 'error'],
     'fecha_inval'   => ['d', 'Fechas inválidas', 'error'],
-    'oc_formato'    => ['d', 'Números de OC que no cumplen AAAA-NNNN', 'error'],
-    'fact_formato'  => ['d', 'Facturas que no cumplen el formato ARCA (00001-00001234)', 'error'],
+    'oc_sin_nro'    => ['d', 'OC sin número', 'error'],
     'oc_sin_prov'   => ['d', 'OC sin proveedor', 'error'],
     'rem_sin_items' => ['d', 'Remitos sin ítems (no se puede deducir el proveedor)', 'error'],
     'oc_anio'       => ['d', 'Aviso: el año del número de OC no coincide con el año de su fecha', 'aviso'],
@@ -76,10 +75,10 @@ function obra_corta(int $obra_id): string
 }
 
 // ------------------------------------------------------------------ a) duplicados
-// OC repetidas (en todo el sistema, sin distinguir mayúsculas ni espacios)
+// OC repetidas (en todo el sistema; 2025-1 y 2025-0001 cuentan como el mismo número)
 $grupos = [];
 foreach ($compras as $c) {
-    $k = strtoupper(preg_replace('/\s+/', '', trim((string)$c['nro_compra'])));
+    $k = oc_clave($c['nro_compra']);
     if ($k !== '') {
         $grupos[$k][] = $c;
     }
@@ -182,9 +181,9 @@ foreach ($remitos as $r) {
 // ------------------------------------------------------------------ d) valores y formatos inválidos
 foreach ($compras as $c) {
     $oid = $c['obra_id'];
-    if (!oc_formato_valido($c['nro_compra'])) {
-        hallazgo('oc_formato', [$oid], 'Número de OC <strong>' . h($c['nro_compra'] === '' ? '(vacío)' : $c['nro_compra']) . '</strong> de ' . h($c['proveedor']) . ': debe ser AAAA-NNNN (ej. 2025-0001).');
-    } elseif (fecha_valida((string)$c['fecha_compra']) && oc_anio($c['nro_compra']) !== (int)substr($c['fecha_compra'], 0, 4)) {
+    if (trim((string)$c['nro_compra']) === '') {
+        hallazgo('oc_sin_nro', [$oid], 'Hay una OC sin número (proveedor: ' . h($c['proveedor']) . ').');
+    } elseif (fecha_valida((string)$c['fecha_compra']) && oc_anio($c['nro_compra']) !== null && oc_anio($c['nro_compra']) !== (int)substr($c['fecha_compra'], 0, 4)) {
         hallazgo('oc_anio', [$oid], oc_txt($c) . ' tiene fecha ' . fecha_txt($c['fecha_compra']) . '.');
     }
     if (!fecha_valida((string)$c['fecha_compra'])) {
@@ -206,9 +205,6 @@ foreach ($detalles as $d) {
 foreach ($facturas as $f) {
     $c = $compras[$f['compra_id']] ?? null;
     if (!$c) continue;
-    if (!factura_arca_valida($f['nro_factura'])) {
-        hallazgo('fact_formato', [$c['obra_id']], 'Factura <strong>' . h($f['nro_factura'] === '' ? '(vacío)' : $f['nro_factura']) . '</strong> (' . oc_txt($c) . ', ' . h($c['proveedor']) . '): debe ser PPPPP-NNNNNNNN (ej. 00001-00001234).');
-    }
     if (!numero_positivo($f['monto'])) {
         hallazgo('cantidad', [$c['obra_id']], 'Factura <strong>' . h($f['nro_factura']) . '</strong>: monto = <strong>' . h($f['monto']) . '</strong>.');
     }

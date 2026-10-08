@@ -25,34 +25,43 @@ function fecha_valida($f): bool
     return checkdate($mo, $d, $y) && $y >= ANIO_MIN && $y <= anio_max();
 }
 
-/** Número de OC con formato AAAA-NNNN (ej. 2025-0001). */
-function oc_formato_valido($n): bool
-{
-    return is_string($n) && preg_match('/^(\d{4})-(\d{4})$/', $n, $m)
-        && (int)$m[1] >= ANIO_MIN && (int)$m[1] <= anio_max() && (int)$m[2] > 0;
-}
-
-/** Año que figura en el número de OC, o null si no tiene formato válido. */
+/** Año que figura al inicio de un número de OC tipo "2025-0001" o "2025-1" (null si no tiene ese estilo). */
 function oc_anio($n): ?int
 {
-    return (is_string($n) && preg_match('/^(\d{4})-\d{4}$/', $n, $m)) ? (int)$m[1] : null;
+    if (is_string($n) && preg_match('/^(\d{4})\s*-\s*\d+$/', trim($n), $m)) {
+        $y = (int)$m[1];
+        return ($y >= ANIO_MIN && $y <= anio_max()) ? $y : null;
+    }
+    return null;
 }
 
-/** Factura con nomenclatura ARCA: punto de venta de 4 o 5 dígitos, guion, número de 8 dígitos. */
-function factura_arca_valida($n): bool
+/** Un número de documento (OC o factura) escrito libremente: no vacío y de hasta 100 caracteres. */
+function numero_documento_ok($n): bool
 {
-    return is_string($n) && preg_match('/^(\d{4,5})-(\d{8})$/', $n, $m)
-        && (int)$m[1] > 0 && (int)$m[2] > 0;
+    return is_string($n) && trim($n) !== '' && mb_strlen(trim($n)) <= 100;
 }
 
-/** Clave para comparar números de factura ("1-1234" y "00001-00001234" son la misma). */
-function factura_clave($n): string
+/**
+ * Clave para comparar números de OC o de factura sin importar los ceros a la izquierda ni los espacios:
+ * "2025-0001", "2025-1" y "2025 - 01" son el mismo número; "00001-00001234" y "1-1234" también.
+ */
+function numero_clave($n): string
 {
     $n = trim((string)$n);
     if (preg_match('/^(\d+)\s*-\s*(\d+)$/', $n, $m)) {
-        return (int)$m[1] . '-' . (int)$m[2];
+        return (ltrim($m[1], '0') ?: '0') . '-' . (ltrim($m[2], '0') ?: '0');
     }
     return strtoupper(preg_replace('/\s+/', '', $n));
+}
+
+function oc_clave($n): string
+{
+    return numero_clave($n);
+}
+
+function factura_clave($n): string
+{
+    return numero_clave($n);
 }
 
 /** Clave para comparar números de remito (formato libre: solo se ignoran espacios y mayúsculas). */

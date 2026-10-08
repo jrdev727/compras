@@ -91,8 +91,8 @@ Requiere aplicar `migraciones/002_expedientes.sql` (ver `migraciones/LEEME.md`).
 
 | Documento | Regla |
 |-----------|-------|
-| OC | Número `AAAA-NNNN` (ej. `2025-0001`), único en todo el sistema. Si el año del número no coincide con el de la fecha, solo muestra una advertencia |
-| Factura | Número ARCA: punto de venta de 4 o 5 dígitos, guion y 8 dígitos (ej. `00001-00001234`). Único por proveedor |
+| OC | Número libre (ej. `2025-1` o `2025-0001`); único en todo el sistema (`2025-1` y `2025-0001` cuentan como el mismo). Si el número empieza con un año que no coincide con el de la fecha, solo muestra una advertencia |
+| Factura | Número libre (ej. `5-124578` o `00005-00124578`); único por proveedor (los ceros a la izquierda no cuentan) |
 | Remito | Formato libre. No se repite el mismo número para el mismo proveedor (se deduce de los ítems) |
 | Todos | Cantidades, precios y montos mayores que cero; fechas válidas |
 | Fechas | Fecha OC ≤ fecha factura; fecha remito ≥ fecha de la OC de sus ítems (la misma fecha se permite). Al editar la fecha de una OC se revisa contra sus facturas y remitos |
