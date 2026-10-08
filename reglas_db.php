@@ -19,28 +19,108 @@ function fmt_lista(array $lineas, int $max = 5): string
 
 // ------------------------------------------------------------------ ítems y cantidades
 
-/** Ítems de una OC: al menos uno tildado, y cada uno con descripción, cantidad > 0 y precio > 0. */
-function validar_items_oc(array $items): void
+/**
+ * Prepara y valida los ítems de una OC. Cada ítem es un material de la SOLICITUD de la obra: la
+ * descripción y la unidad salen de la solicitud, no se escriben a mano. $compra_id = 0 en el alta.
+ * Controla cantidad > 0, precio > 0 y que no se supere el saldo pendiente de la solicitud
+ * (sumando también las filas repetidas del mismo material dentro de esta OC).
+ * Devuelve los ítems listos para guardar: id, material_id, descripcion, unidad, cantidad, precio.
+ */
+function preparar_items_oc(PDO $pdo, int $obra_id, array $items, int $compra_id = 0): array
 {
-    $n = 0;
-    foreach ($items as $idx => $it) {
-        if (!isset($it['incluir'])) continue;
-        $n++;
-        $desc = trim((string)($it['descripcion'] ?? ''));
-        $etq = 'Ítem ' . ($desc !== '' ? "«{$desc}»" : '#' . ($idx + 1));
-        if ($desc === '') {
-            throw new ErrorValidacion("$etq: falta la descripción.");
-        }
-        if (!numero_positivo($it['cantidad_comprada'] ?? null)) {
-            throw new ErrorValidacion("$etq: la cantidad debe ser mayor que cero (se ingresó «" . ($it['cantidad_comprada'] ?? '') . '»).');
-        }
-        if (!numero_positivo($it['precio_unitario'] ?? null)) {
-            throw new ErrorValidacion("$etq: el precio unitario debe ser mayor que cero (se ingresó «" . ($it['precio_unitario'] ?? '') . '»).');
+    $st = $pdo->prepare("SELECT id, descripcion, cantidad, unidad FROM materiales_solicitados WHERE obra_id = ?");
+    $st->execute([$obra_id]);
+    $materiales = [];
+    foreach ($st as $m) {
+        $materiales[(int)$m['id']] = $m;
+    }
+
+    // Cantidad ya adjudicada en OTRAS órdenes de compra
+    $st = $pdo->prepare("
+        SELECT material_solicitado_id, SUM(cantidad_comprada) AS total
+        FROM compra_detalles
+        WHERE material_solicitado_id IS NOT NULL AND compra_id <> ?
+        GROUP BY material_solicitado_id
+    ");
+    $st->execute([$compra_id]);
+    $en_otras = [];
+    foreach ($st as $r) {
+        $en_otras[(int)$r['material_solicitado_id']] = (float)$r['total'];
+    }
+
+    // Ítems que ya tiene esta OC (al editar)
+    $existentes = [];
+    if ($compra_id > 0) {
+        $st = $pdo->prepare("SELECT id, material_solicitado_id, descripcion, unidad FROM compra_detalles WHERE compra_id = ?");
+        $st->execute([$compra_id]);
+        foreach ($st as $r) {
+            $existentes[(int)$r['id']] = $r;
         }
     }
-    if ($n === 0) {
+
+    $salida = [];
+    $acumulado = [];
+    foreach (array_values($items) as $i => $it) {
+        if (!isset($it['incluir'])) continue;
+        $n = $i + 1;
+        $item_id = (int)($it['id'] ?? 0);
+        $ex = null;
+        if ($item_id > 0) {
+            if (!isset($existentes[$item_id])) {
+                throw new ErrorValidacion("Ítem #$n: no pertenece a esta orden de compra.");
+            }
+            $ex = $existentes[$item_id];
+        }
+        // Si el ítem ya estaba vinculado a un material, el vínculo no cambia
+        $mat_id = ($ex && $ex['material_solicitado_id'] !== null) ? (int)$ex['material_solicitado_id'] : (int)($it['material_solicitado_id'] ?? 0);
+
+        if ($mat_id > 0) {
+            if (!isset($materiales[$mat_id])) {
+                throw new ErrorValidacion("Ítem #$n: el material elegido no pertenece a la solicitud de esta obra.");
+            }
+            $desc = $materiales[$mat_id]['descripcion'];
+            $unidad = $materiales[$mat_id]['unidad'];
+        } elseif ($ex) {
+            // Ítem antiguo sin vincular a la solicitud: se conserva como está
+            $desc = $ex['descripcion'];
+            $unidad = $ex['unidad'];
+        } else {
+            throw new ErrorValidacion("Ítem #$n: elegí el material de la solicitud de la obra.");
+        }
+
+        $etq = "Ítem «{$desc}»";
+        $cant_txt = $it['cantidad_comprada'] ?? '';
+        $prec_txt = $it['precio_unitario'] ?? '';
+        if (!numero_positivo($cant_txt)) {
+            throw new ErrorValidacion("$etq: la cantidad debe ser mayor que cero (se ingresó «{$cant_txt}»).");
+        }
+        if (!numero_positivo($prec_txt)) {
+            throw new ErrorValidacion("$etq: el precio unitario debe ser mayor que cero (se ingresó «{$prec_txt}»).");
+        }
+        $cantidad = round((float)$cant_txt, 2);
+
+        if ($mat_id > 0) {
+            $acumulado[$mat_id] = ($acumulado[$mat_id] ?? 0) + $cantidad;
+            $solicitada = (float)$materiales[$mat_id]['cantidad'];
+            $otras = $en_otras[$mat_id] ?? 0.0;
+            $disponible = $solicitada - $otras;
+            if ($acumulado[$mat_id] > $disponible + 0.005) {
+                throw new ErrorValidacion("La cantidad a comprar de '{$desc}' (" . rtrim(rtrim(number_format($acumulado[$mat_id], 2, '.', ''), '0'), '.') . ") supera el saldo pendiente de la solicitud original. Solicitado: " . rtrim(rtrim(number_format($solicitada, 2, '.', ''), '0'), '.') . ", ya adjudicado en otras OC: " . rtrim(rtrim(number_format($otras, 2, '.', ''), '0'), '.') . ". Disponible para comprar: " . rtrim(rtrim(number_format(max($disponible, 0), 2, '.', ''), '0'), '.') . '.');
+            }
+        }
+        $salida[] = [
+            'id' => $item_id,
+            'material_id' => $mat_id > 0 ? $mat_id : null,
+            'descripcion' => $desc,
+            'unidad' => $unidad,
+            'cantidad' => $cantidad,
+            'precio' => round((float)$prec_txt, 2),
+        ];
+    }
+    if (!$salida) {
         throw new ErrorValidacion('La OC debe tener al menos un ítem tildado.');
     }
+    return $salida;
 }
 
 /** Materiales solicitados de una obra: las filas con datos deben tener descripción y cantidad > 0. Devuelve el error o null. */

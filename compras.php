@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();
 
                 // 0. Validaciones del servidor (si algo falla no se guarda nada)
-                validar_items_oc($items);
+                $items_ok = preparar_items_oc($pdo, $obra_id, $items, 0);
                 $advertencias = validar_oc($pdo, $nro_compra, $fecha_compra);
 
                 // 1. Insertar Cabecera de Compra
@@ -51,55 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $compra_id = $pdo->lastInsertId();
 
-                // 2. Insertar Detalles de Compra
+                // 2. Insertar Detalles de Compra (descripción y unidad salen de la solicitud de la obra)
                 $stmtItem = $pdo->prepare("
                     INSERT INTO compra_detalles (compra_id, material_solicitado_id, descripcion, cantidad_comprada, unidad, precio_unitario) 
                     VALUES (?, ?, ?, ?, ?, ?)
                 ");
-                
-                foreach ($items as $item) {
-                    // Solo guardamos si el checkbox 'incluir' está marcado
-                    if (isset($item['incluir']) && !empty($item['descripcion']) && $item['cantidad_comprada'] > 0) {
-                        $mat_solicitado_id = (!empty($item['material_solicitado_id'])) ? intval($item['material_solicitado_id']) : null;
-                        $cantidad_comprada = floatval($item['cantidad_comprada']);
-                        
-                        $unidad_original = 'Unidades';
-                        if ($mat_solicitado_id) {
-                            // Validar cantidad solicitada vs ya comprada
-                            $stmtOrig = $pdo->prepare("SELECT descripcion, cantidad FROM materiales_solicitados WHERE id = ?");
-                            $stmtOrig->execute([$mat_solicitado_id]);
-                            $orig = $stmtOrig->fetch();
-                            $desc_original = $orig['descripcion'] ?? 'Material';
-                            $cant_solicitada = floatval($orig['cantidad'] ?? 0);
-
-                            $stmtYaComprado = $pdo->prepare("
-                                SELECT COALESCE(SUM(cd.cantidad_comprada), 0) 
-                                FROM compra_detalles cd
-                                WHERE cd.material_solicitado_id = ? 
-                                  AND cd.compra_id != ?
-                            ");
-                            $stmtYaComprado->execute([$mat_solicitado_id, $compra_id]);
-                            $cant_ya_comprada = floatval($stmtYaComprado->fetchColumn());
-
-                            if (($cantidad_comprada + $cant_ya_comprada) > $cant_solicitada) {
-                                $disponible = $cant_solicitada - $cant_ya_comprada;
-                                throw new ErrorValidacion("La cantidad a comprar de '" . $desc_original . "' (" . $cantidad_comprada . ") supera el saldo pendiente de la solicitud original. Disponible para comprar: " . $disponible);
-                            }
-
-                            $stmtUnit = $pdo->prepare("SELECT unidad FROM materiales_solicitados WHERE id = ?");
-                            $stmtUnit->execute([$mat_solicitado_id]);
-                            $unidad_original = $stmtUnit->fetchColumn() ?: 'Unidades';
-                        }
-
-                        $stmtItem->execute([
-                            $compra_id,
-                            $mat_solicitado_id,
-                            trim($item['descripcion']),
-                            floatval($item['cantidad_comprada']),
-                            $unidad_original,
-                            floatval($item['precio_unitario'])
-                        ]);
-                    }
+                foreach ($items_ok as $it) {
+                    $stmtItem->execute([$compra_id, $it['material_id'], $it['descripcion'], $it['cantidad'], $it['unidad'], $it['precio']]);
                 }
 
                 $pdo->commit();
@@ -136,7 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->beginTransaction();
 
                 // 0. Validaciones del servidor (si algo falla no se guarda nada)
-                validar_items_oc($items);
+                $stObra = $pdo->prepare("SELECT obra_id FROM compras WHERE id = ?");
+                $stObra->execute([$compra_id]);
+                $items_ok = preparar_items_oc($pdo, (int)$stObra->fetchColumn(), $items, $compra_id);
                 $advertencias = validar_oc($pdo, $nro_compra, $fecha_compra, $compra_id);
                 // Al cambiar la fecha se revisa contra las facturas y remitos vinculados
                 validar_fecha_oc_vs_vinculados($pdo, $compra_id, $nro_compra, $fecha_compra);
@@ -171,67 +131,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     WHERE id = ? AND compra_id = ?
                 ");
 
-                foreach ($items as $item) {
-                    if (isset($item['incluir'])) {
-                        $item_id = isset($item['id']) ? intval($item['id']) : 0;
-                        $mat_solicitado_id = (!empty($item['material_solicitado_id'])) ? intval($item['material_solicitado_id']) : null;
-                        $cantidad_comprada = floatval($item['cantidad_comprada']);
-                        
-                        $unidad_original = 'Unidades';
-                        if ($mat_solicitado_id) {
-                            // Validar cantidad solicitada vs ya comprada
-                            $stmtOrig = $pdo->prepare("SELECT descripcion, cantidad FROM materiales_solicitados WHERE id = ?");
-                            $stmtOrig->execute([$mat_solicitado_id]);
-                            $orig = $stmtOrig->fetch();
-                            $desc_original = $orig['descripcion'] ?? 'Material';
-                            $cant_solicitada = floatval($orig['cantidad'] ?? 0);
-
-                            $stmtYaComprado = $pdo->prepare("
-                                SELECT COALESCE(SUM(cd.cantidad_comprada), 0) 
-                                FROM compra_detalles cd
-                                WHERE cd.material_solicitado_id = ? 
-                                  AND cd.compra_id != ?
-                            ");
-                            $stmtYaComprado->execute([$mat_solicitado_id, $compra_id]);
-                            $cant_ya_comprada = floatval($stmtYaComprado->fetchColumn());
-
-                            if (($cantidad_comprada + $cant_ya_comprada) > $cant_solicitada) {
-                                $disponible = $cant_solicitada - $cant_ya_comprada;
-                                throw new ErrorValidacion("La cantidad a comprar de '" . $desc_original . "' (" . $cantidad_comprada . ") supera el saldo pendiente de la solicitud original. Disponible para comprar: " . $disponible);
-                            }
-
-                            $stmtUnit = $pdo->prepare("SELECT unidad FROM materiales_solicitados WHERE id = ?");
-                            $stmtUnit->execute([$mat_solicitado_id]);
-                            $unidad_original = $stmtUnit->fetchColumn() ?: 'Unidades';
-                        } else {
-                            $unidad_original = isset($item['unidad']) ? trim($item['unidad']) : 'Unidades';
-                        }
-
-                        if ($item_id > 0) {
-                            // Actualizar
-                            $stmtUpdate->execute([
-                                $mat_solicitado_id,
-                                trim($item['descripcion']),
-                                floatval($item['cantidad_comprada']),
-                                $unidad_original,
-                                floatval($item['precio_unitario']),
-                                $item_id,
-                                $compra_id
-                            ]);
-                            $form_ids[] = $item_id;
-                        } else {
-                            // Insertar
-                            if (!empty($item['descripcion']) && $item['cantidad_comprada'] > 0) {
-                                $stmtInsert->execute([
-                                    $compra_id,
-                                    $mat_solicitado_id,
-                                    trim($item['descripcion']),
-                                    floatval($item['cantidad_comprada']),
-                                    $unidad_original,
-                                    floatval($item['precio_unitario'])
-                                ]);
-                            }
-                        }
+                foreach ($items_ok as $it) {
+                    if ($it['id'] > 0) {
+                        $stmtUpdate->execute([$it['material_id'], $it['descripcion'], $it['cantidad'], $it['unidad'], $it['precio'], $it['id'], $compra_id]);
+                        $form_ids[] = $it['id'];
+                    } else {
+                        $stmtInsert->execute([$compra_id, $it['material_id'], $it['descripcion'], $it['cantidad'], $it['unidad'], $it['precio']]);
                     }
                 }
 
@@ -406,39 +311,36 @@ require_once 'header.php';
                    SELECT COUNT(*) 
                    FROM materiales_solicitados ms
                    WHERE ms.obra_id = o.id 
-                     AND NOT EXISTS (
-                         SELECT 1 
+                     AND ms.cantidad > COALESCE((
+                         SELECT SUM(cd.cantidad_comprada)
                          FROM compra_detalles cd
                          WHERE cd.material_solicitado_id = ms.id
-                     )
+                     ), 0)
                ) AS materiales_pendientes_count
         FROM obras o 
         ORDER BY o.nombre ASC
     ");
     $obras = $obras_stmt->fetchAll();
 
-    // Obtener solo los materiales por obra que AÚN NO se han cargado en ninguna orden de compra
+    // Materiales de la solicitud de cada obra que todavía tienen saldo pendiente de comprar
     $mat_stmt = $pdo->query("
-        SELECT ms.id, ms.obra_id, ms.descripcion, ms.cantidad, ms.unidad
+        SELECT ms.id, ms.obra_id, ms.descripcion, ms.cantidad, ms.unidad,
+               COALESCE((SELECT SUM(cd.cantidad_comprada) FROM compra_detalles cd WHERE cd.material_solicitado_id = ms.id), 0) AS comprado
         FROM materiales_solicitados ms
-        WHERE NOT EXISTS (
-            SELECT 1 
-            FROM compra_detalles cd
-            WHERE cd.material_solicitado_id = ms.id
-        )
         ORDER BY ms.descripcion ASC
     ");
-    $todos_materiales = $mat_stmt->fetchAll();
-    
-    // Agruparlos por obra en un array asociativo
     $materiales_por_obra = [];
-    foreach ($todos_materiales as $m) {
-        $materiales_por_obra[$m['obra_id']][] = [
-            'id' => $m['id'],
-            'descripcion' => $m['descripcion'],
-            'cantidad' => floatval($m['cantidad']),
-            'unidad' => $m['unidad']
-        ];
+    foreach ($mat_stmt as $m) {
+        $pendiente = round((float)$m['cantidad'] - (float)$m['comprado'], 2);
+        if ($pendiente > 0) {
+            $materiales_por_obra[$m['obra_id']][] = [
+                'id' => (int)$m['id'],
+                'descripcion' => $m['descripcion'],
+                'cantidad' => (float)$m['cantidad'],
+                'pendiente' => $pendiente,
+                'unidad' => $m['unidad']
+            ];
+        }
     }
 ?>
     <div class="page-header">
@@ -466,62 +368,51 @@ require_once 'header.php';
                     agregarFilaMaterial(mat);
                 });
             } else {
-                container.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.9rem; padding: 1rem; text-align: center;">Esta obra no tiene materiales solicitados registrados.</p>';
+                container.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.9rem; padding: 1rem; text-align: center;">Esta obra no tiene materiales pendientes de comprar en su solicitud.</p>';
             }
         }
 
-        function agregarFilaMaterial(mat = null, isExtra = false) {
+        function esc(t) {
+            return String(t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+        }
+
+        // Cada fila es un material de la SOLICITUD de la obra: no se escribe descripción a mano.
+        function agregarFilaMaterial(mat) {
             const container = document.getElementById('dynamic-compra-items');
-            
-            // Si el contenedor tenía el mensaje de "no tiene materiales", lo removemos
-            if (container.querySelector('p')) {
-                container.innerHTML = '';
-            }
 
             const row = document.createElement('div');
             row.className = 'dynamic-item-row';
             row.style.gridTemplateColumns = '55px 3fr 1fr 100px 1fr auto';
             row.style.alignItems = 'center';
-            
-            const matId = mat ? mat.id : '';
-            const desc = mat ? mat.descripcion : '';
-            const cant = mat ? mat.cantidad : '';
-            const unidad = mat ? mat.unidad : 'Unidades';
-            
-            // Si viene de material solicitado original (mat !== null y isExtra es falso), empieza DESTILDADO.
-            // Si es un ítem extra añadido a mano, empieza TILDADO.
-            const isChecked = isExtra || (mat === null);
-            const checkedAttr = isChecked ? 'checked' : '';
-            const disabledAttr = isChecked ? '' : 'disabled';
-            const requiredAttr = isChecked ? 'required' : '';
-            if (!isChecked) {
-                row.style.opacity = '0.5';
-            }
+            row.style.opacity = '0.5';
+            row.dataset.texto = mat.descripcion.toLowerCase();
 
+            const parcial = mat.pendiente < mat.cantidad;
             row.innerHTML = `
                 <div class="form-group text-center">
                     <label class="form-label" style="font-size:0.75rem;">¿Incluir?</label>
-                    <input type="checkbox" name="items[${itemIdx}][incluir]" value="1" ${checkedAttr} style="width: 20px; height: 20px; margin: 0 auto; cursor: pointer;" onchange="toggleRowInputs(this)">
+                    <input type="checkbox" name="items[${itemIdx}][incluir]" value="1" style="width: 20px; height: 20px; margin: 0 auto; cursor: pointer;" onchange="toggleRowInputs(this)">
                 </div>
-                <input type="hidden" name="items[${itemIdx}][material_solicitado_id]" value="${matId}">
+                <input type="hidden" name="items[${itemIdx}][material_solicitado_id]" value="${mat.id}">
                 <div class="form-group">
-                    <label class="form-label">Descripción del Material *</label>
-                    <input type="text" name="items[${itemIdx}][descripcion]" class="form-control" value="${desc}" placeholder="Ej. Cemento Portland 50kg" ${disabledAttr} ${requiredAttr}>
+                    <label class="form-label">Material de la solicitud</label>
+                    <div style="font-weight: 600; padding-top: 0.4rem;">${esc(mat.descripcion)}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Solicitado: ${mat.cantidad} ${esc(mat.unidad)}${parcial ? ' · Pendiente de comprar: ' + mat.pendiente : ''}</div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Cantidad Comprada *</label>
-                    <input type="number" step="0.01" name="items[${itemIdx}][cantidad_comprada]" class="form-control" value="${cant}" placeholder="0.00" ${disabledAttr} ${requiredAttr}>
+                    <input type="number" step="0.01" min="0.01" max="${mat.pendiente}" name="items[${itemIdx}][cantidad_comprada]" class="form-control" value="${mat.pendiente}" placeholder="0.00" disabled>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Unidad</label>
-                    <span class="badge badge-secondary" style="margin-top: 0.5rem; display: block; text-align: center; padding: 0.6rem; font-size: 0.75rem;">${unidad}</span>
+                    <span class="badge badge-secondary" style="margin-top: 0.5rem; display: block; text-align: center; padding: 0.6rem; font-size: 0.75rem;">${esc(mat.unidad)}</span>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Precio Unitario ($) *</label>
-                    <input type="number" step="0.01" name="items[${itemIdx}][precio_unitario]" class="form-control" placeholder="0.00" ${disabledAttr} ${requiredAttr}>
+                    <input type="number" step="0.01" min="0.01" name="items[${itemIdx}][precio_unitario]" class="form-control" placeholder="0.00" disabled>
                 </div>
                 <div style="padding-bottom: 5px;">
-                    <button type="button" class="btn btn-danger btn-sm btn-remove-row" style="margin-top: 1.8rem;">
+                    <button type="button" class="btn btn-danger btn-sm btn-remove-row" style="margin-top: 1.8rem;" title="Quitar de la lista">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                     </button>
                 </div>
@@ -567,27 +458,11 @@ require_once 'header.php';
                     const query = searchInput.value.toLowerCase();
                     const rows = document.querySelectorAll('#dynamic-compra-items .dynamic-item-row');
                     rows.forEach(row => {
-                        const descInput = row.querySelector('input[name*="[descripcion]"]');
-                        if (descInput) {
-                            const text = descInput.value.toLowerCase();
-                            if (text.includes(query)) {
-                                row.style.display = '';
-                            } else {
-                                row.style.display = 'none';
-                            }
-                        }
+                        row.style.display = (row.dataset.texto || '').includes(query) ? '' : 'none';
                     });
                 });
             }
             
-            // Botón para agregar ítems extras/adicionales
-            const btnAddExtra = document.getElementById('btn-add-compra-item');
-            if (btnAddExtra) {
-                btnAddExtra.addEventListener('click', () => {
-                    agregarFilaMaterial(null, true);
-                });
-            }
-
             // Event delegation para eliminar fila
             document.getElementById('dynamic-compra-items').addEventListener('click', (e) => {
                 if (e.target.closest('.btn-remove-row')) {
@@ -655,7 +530,7 @@ require_once 'header.php';
             </div>
             <div class="card-body">
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Los materiales solicitados originalmente para esta obra se han cargado automáticamente a continuación. Ingrese los precios unitarios adjudicados y desmarque los ítems que no correspondan a esta orden de compra.
+                    Se listan los materiales de la solicitud de la obra que todavía tienen cantidad pendiente de comprar. Tildá los que corresponden a esta orden de compra, ajustá la cantidad si no se compra todo e ingresá el precio unitario adjudicado.
                 </p>
                 
                 <!-- Buscador de Materiales Solicitados -->
@@ -670,14 +545,6 @@ require_once 'header.php';
                 
                 <div id="dynamic-compra-items">
                     <p style="color: var(--text-secondary); font-size: 0.9rem; padding: 1rem; text-align: center;">Seleccione una obra para cargar sus materiales automáticamente.</p>
-                </div>
-
-                <!-- Botón de añadir item colocado abajo -->
-                <div style="margin-top: 1.5rem; margin-bottom: 1rem;">
-                    <button type="button" id="btn-add-compra-item" class="btn btn-secondary btn-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg>
-                        + Agregar Otro Ítem Extra
-                    </button>
                 </div>
 
                 <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
@@ -715,27 +582,26 @@ require_once 'header.php';
     $stmtItems->execute([$id]);
     $items_compra = $stmtItems->fetchAll();
 
-    // Obtener materiales solicitados de la obra que están en esta compra o aún no se han adjudicado a ninguna otra
+    // Materiales de la solicitud de la obra, con lo ya adjudicado en OTRAS órdenes de compra
     $stmtMat = $pdo->prepare("
-        SELECT id, descripcion, cantidad, unidad
-        FROM materiales_solicitados
-        WHERE obra_id = ?
-          AND (
-              id IN (
-                  SELECT material_solicitado_id 
-                  FROM compra_detalles 
-                  WHERE compra_id = ? AND material_solicitado_id IS NOT NULL
-              )
-              OR id NOT IN (
-                  SELECT material_solicitado_id 
-                  FROM compra_detalles 
-                  WHERE material_solicitado_id IS NOT NULL
-              )
-          )
-        ORDER BY descripcion ASC
+        SELECT ms.id, ms.descripcion, ms.cantidad, ms.unidad,
+               COALESCE((SELECT SUM(cd.cantidad_comprada) FROM compra_detalles cd
+                         WHERE cd.material_solicitado_id = ms.id AND cd.compra_id <> ?), 0) AS en_otras,
+               EXISTS (SELECT 1 FROM compra_detalles cd WHERE cd.material_solicitado_id = ms.id AND cd.compra_id = ?) AS en_esta
+        FROM materiales_solicitados ms
+        WHERE ms.obra_id = ?
+        ORDER BY ms.descripcion ASC
     ");
-    $stmtMat->execute([$compra['obra_id'], $id]);
-    $materiales_obra = $stmtMat->fetchAll();
+    $stmtMat->execute([$id, $id, $compra['obra_id']]);
+    $materiales_obra = [];            // id => datos (todos los de la obra)
+    $materiales_disponibles = [];     // los que se pueden agregar: no están en esta OC y tienen saldo
+    foreach ($stmtMat as $m) {
+        $m['pendiente'] = round((float)$m['cantidad'] - (float)$m['en_otras'], 2);
+        $materiales_obra[$m['id']] = $m;
+        if (!$m['en_esta'] && $m['pendiente'] > 0) {
+            $materiales_disponibles[] = $m;
+        }
+    }
 ?>
     <div class="page-header">
         <div class="page-title">
@@ -788,56 +654,59 @@ require_once 'header.php';
             </div>
             <div class="card-body">
                 <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Modifique las cantidades, descripciones o añada nuevos ítems. Si desmarca la casilla "Incluir", ese ítem se eliminará de la orden de compra.
+                    Modifique las cantidades y precios, o agregue materiales de la solicitud de la obra. Si desmarca la casilla "Incluir", ese ítem se eliminará de la orden de compra.
                 </p>
                 
                 <div id="dynamic-compra-items-edit">
                     <?php 
                     $idx = 0;
                     foreach ($items_compra as $item): 
+                        $mat_vinculado = $item['material_solicitado_id'] !== null ? ($materiales_obra[$item['material_solicitado_id']] ?? null) : null;
                     ?>
                         <div class="dynamic-item-row" style="grid-template-columns: 55px 3fr 1fr 100px 1fr auto; align-items: center;">
-                            <input type="hidden" name="items[<?= $idx ?>][id]" value="<?= $item['id'] ?>">
+                            <input type="hidden" name="items[<?= $idx ?>][id]" value="<?= (int)$item['id'] ?>">
                             <div class="form-group text-center">
                                 <label class="form-label" style="font-size:0.75rem;">¿Incluir?</label>
                                 <input type="checkbox" name="items[<?= $idx ?>][incluir]" value="1" checked style="width: 20px; height: 20px; margin: 0 auto; cursor: pointer;" onchange="toggleRowInputs(this)">
                             </div>
                             
                             <div class="form-group">
-                                <label class="form-label">Vincular a Material Solicitado</label>
-                                <select name="items[<?= $idx ?>][material_solicitado_id]" class="form-control" onchange="actualizarUnidadEtiqueta(this)">
-                                    <option value="">-- No vincular --</option>
-                                    <?php foreach ($materiales_obra as $mat): ?>
-                                        <option value="<?= $mat['id'] ?>" <?= ($item['material_solicitado_id'] == $mat['id']) ? 'selected' : '' ?> data-unidad="<?= htmlspecialchars($mat['unidad']) ?>">
-                                            <?= htmlspecialchars($mat['descripcion']) ?> (Solicitado: <?= htmlspecialchars($mat['cantidad']) ?> <?= htmlspecialchars($mat['unidad']) ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="form-label">Descripción *</label>
-                                <input type="text" name="items[<?= $idx ?>][descripcion]" class="form-control" value="<?= htmlspecialchars($item['descripcion']) ?>" required>
+                                <label class="form-label">Material de la solicitud</label>
+                                <?php if ($mat_vinculado): ?>
+                                    <input type="hidden" name="items[<?= $idx ?>][material_solicitado_id]" value="<?= (int)$mat_vinculado['id'] ?>">
+                                    <div style="font-weight: 600; padding-top: 0.4rem;"><?= h($mat_vinculado['descripcion']) ?></div>
+                                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Solicitado: <?= h(floatval($mat_vinculado['cantidad'])) ?> <?= h($mat_vinculado['unidad']) ?> · Se puede comprar hasta: <?= h($mat_vinculado['pendiente']) ?></div>
+                                <?php else: ?>
+                                    <div style="font-weight: 600; padding-top: 0.4rem;"><?= h($item['descripcion']) ?></div>
+                                    <div style="font-size: 0.8rem; color: var(--danger-dark);">Ítem antiguo sin vincular a la solicitud. Podés vincularlo:</div>
+                                    <select name="items[<?= $idx ?>][material_solicitado_id]" class="form-control" style="margin-top: .25rem;" onchange="actualizarUnidadEtiqueta(this)">
+                                        <option value="">-- Dejar sin vincular --</option>
+                                        <?php foreach ($materiales_disponibles as $mat): ?>
+                                            <option value="<?= (int)$mat['id'] ?>" data-unidad="<?= h($mat['unidad']) ?>">
+                                                <?= h($mat['descripcion']) ?> (Solicitado: <?= h(floatval($mat['cantidad'])) ?> <?= h($mat['unidad']) ?>)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php endif; ?>
                             </div>
                             
                             <div class="form-group">
                                 <label class="form-label">Cantidad *</label>
-                                <input type="number" step="0.01" name="items[<?= $idx ?>][cantidad_comprada]" class="form-control" value="<?= floatval($item['cantidad_comprada']) ?>" required>
+                                <input type="number" step="0.01" min="0.01" name="items[<?= $idx ?>][cantidad_comprada]" class="form-control" value="<?= floatval($item['cantidad_comprada']) ?>" required>
                             </div>
                             
                             <div class="form-group">
                                 <label class="form-label">Unidad</label>
-                                <input type="hidden" name="items[<?= $idx ?>][unidad]" class="unidad-hidden" value="<?= htmlspecialchars($item['unidad']) ?>">
-                                <span class="badge badge-secondary unidad-label" style="margin-top: 0.5rem; display: block; text-align: center; padding: 0.6rem; font-size: 0.75rem;"><?= htmlspecialchars($item['unidad']) ?></span>
+                                <span class="badge badge-secondary unidad-label" style="margin-top: 0.5rem; display: block; text-align: center; padding: 0.6rem; font-size: 0.75rem;"><?= h($item['unidad']) ?></span>
                             </div>
                             
                             <div class="form-group">
                                 <label class="form-label">Precio Unitario ($) *</label>
-                                <input type="number" step="0.01" name="items[<?= $idx ?>][precio_unitario]" class="form-control" value="<?= floatval($item['precio_unitario']) ?>" required>
+                                <input type="number" step="0.01" min="0.01" name="items[<?= $idx ?>][precio_unitario]" class="form-control" value="<?= floatval($item['precio_unitario']) ?>" required>
                             </div>
                             
                             <div style="padding-bottom: 5px;">
-                                <button type="button" class="btn btn-danger btn-sm btn-remove-row" style="margin-top: 1.8rem;">
+                                <button type="button" class="btn btn-danger btn-sm btn-remove-row" style="margin-top: 1.8rem;" title="Quitar este ítem de la OC">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                                 </button>
                             </div>
@@ -848,41 +717,61 @@ require_once 'header.php';
                     ?>
                 </div>
 
-                <!-- Botón de añadir item colocado abajo en edición -->
+                <!-- Botón de añadir material de la solicitud -->
                 <div style="margin-top: 1.5rem; margin-bottom: 1rem;">
                     <button type="button" id="btn-add-compra-item-edit" class="btn btn-secondary btn-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg>
-                        + Agregar Otro Ítem Extra
+                        Agregar material de la solicitud
                     </button>
                 </div>
 
                 <!-- Script local para dinámicas de edición de compras -->
                 <script>
+                    const materialesDisponibles = <?= json_encode(array_map(fn($m) => [
+                        'id' => (int)$m['id'], 'descripcion' => $m['descripcion'], 'cantidad' => (float)$m['cantidad'],
+                        'pendiente' => (float)$m['pendiente'], 'unidad' => $m['unidad'],
+                    ], $materiales_disponibles), JSON_UNESCAPED_UNICODE) ?>;
+
+                    function esc(t) {
+                        return String(t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+                    }
+
                     function actualizarUnidadEtiqueta(select) {
                         const opt = select.options[select.selectedIndex];
-                        const row = select.closest('.dynamic-item-row');
-                        const hiddenInput = row.querySelector('.unidad-hidden');
-                        const label = row.querySelector('.unidad-label');
-                        if (opt && opt.value !== '') {
-                            const unidad = opt.getAttribute('data-unidad');
-                            hiddenInput.value = unidad;
-                            label.textContent = unidad;
+                        const label = select.closest('.dynamic-item-row').querySelector('.unidad-label');
+                        if (opt && opt.value !== '' && opt.getAttribute('data-unidad')) {
+                            label.textContent = opt.getAttribute('data-unidad');
                         }
+                    }
+
+                    // Al elegir otro material en una fila nueva: unidad y cantidad pendiente
+                    function alElegirMaterial(select) {
+                        actualizarUnidadEtiqueta(select);
+                        const opt = select.options[select.selectedIndex];
+                        const cant = select.closest('.dynamic-item-row').querySelector('input[name$="[cantidad_comprada]"]');
+                        if (opt && cant) cant.value = opt.getAttribute('data-pendiente') || '';
                     }
 
                     function toggleRowInputs(checkbox) {
                         const row = checkbox.closest('.dynamic-item-row');
-                        const inputs = row.querySelectorAll('input[type="text"], input[type="number"], select');
+                        const inputs = row.querySelectorAll('input[type="number"], select');
                         inputs.forEach(input => {
                             input.disabled = !checkbox.checked;
                             if (!checkbox.checked) {
                                 input.removeAttribute('required');
                                 row.style.opacity = '0.5';
                             } else {
-                                input.setAttribute('required', 'required');
+                                if (input.type === 'number') input.setAttribute('required', 'required');
                                 row.style.opacity = '1';
                             }
                         });
+                    }
+
+                    // Materiales de la solicitud que todavía no figuran como fila en esta pantalla
+                    function materialesLibres() {
+                        const usados = new Set(Array.from(document.querySelectorAll('#dynamic-compra-items-edit input[name$="[material_solicitado_id]"], #dynamic-compra-items-edit select[name$="[material_solicitado_id]"]'))
+                            .map(el => el.value).filter(v => v !== ''));
+                        return materialesDisponibles.filter(m => !usados.has(String(m.id)));
                     }
 
                     document.addEventListener('DOMContentLoaded', () => {
@@ -890,53 +779,45 @@ require_once 'header.php';
                         const container = document.getElementById('dynamic-compra-items-edit');
                         let editItemIdx = <?= $idx ?>;
 
-                        // Opciones de materiales de la obra
-                        const materialOptions = `
-                            <option value="">-- No vincular --</option>
-                            <?php foreach ($materiales_obra as $mat): ?>
-                                <option value="<?= $mat['id'] ?>" data-unidad="<?= htmlspecialchars($mat['unidad']) ?>">
-                                    <?= htmlspecialchars($mat['descripcion']) ?> (Solicitado: <?= htmlspecialchars($mat['cantidad']) ?> <?= htmlspecialchars($mat['unidad']) ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        `;
-
                         if (btnAdd && container) {
                             btnAdd.addEventListener('click', () => {
+                                const libres = materialesLibres();
+                                if (libres.length === 0) {
+                                    alert('No quedan materiales de la solicitud pendientes de comprar para agregar a esta OC.');
+                                    return;
+                                }
+                                const opciones = libres.map(m =>
+                                    `<option value="${m.id}" data-unidad="${esc(m.unidad)}" data-pendiente="${m.pendiente}">${esc(m.descripcion)} (Solicitado: ${m.cantidad} ${esc(m.unidad)}${m.pendiente < m.cantidad ? ' · Pendiente: ' + m.pendiente : ''})</option>`
+                                ).join('');
                                 const newRow = document.createElement('div');
                                 newRow.className = 'dynamic-item-row';
                                 newRow.style.gridTemplateColumns = '55px 3fr 1fr 100px 1fr auto';
                                 newRow.style.alignItems = 'center';
-                                
                                 newRow.innerHTML = `
                                     <div class="form-group text-center">
                                         <label class="form-label" style="font-size:0.75rem;">¿Incluir?</label>
                                         <input type="checkbox" name="items[${editItemIdx}][incluir]" value="1" checked style="width: 20px; height: 20px; margin: 0 auto; cursor: pointer;" onchange="toggleRowInputs(this)">
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label">Vincular a Material Solicitado</label>
-                                        <select name="items[${editItemIdx}][material_solicitado_id]" class="form-control" onchange="actualizarUnidadEtiqueta(this)">
-                                            ${materialOptions}
+                                        <label class="form-label">Material de la solicitud *</label>
+                                        <select name="items[${editItemIdx}][material_solicitado_id]" class="form-control" required onchange="alElegirMaterial(this)">
+                                            ${opciones}
                                         </select>
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label">Descripción *</label>
-                                        <input type="text" name="items[${editItemIdx}][descripcion]" class="form-control" placeholder="Ej. Ladrillo Hueco" required>
-                                    </div>
-                                    <div class="form-group">
                                         <label class="form-label">Cantidad *</label>
-                                        <input type="number" step="0.01" name="items[${editItemIdx}][cantidad_comprada]" class="form-control" placeholder="0.00" required>
+                                        <input type="number" step="0.01" min="0.01" name="items[${editItemIdx}][cantidad_comprada]" class="form-control" value="${libres[0].pendiente}" required>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Unidad</label>
-                                        <input type="hidden" name="items[${editItemIdx}][unidad]" class="unidad-hidden" value="Unidades">
-                                        <span class="badge badge-secondary unidad-label" style="margin-top: 0.5rem; display: block; text-align: center; padding: 0.6rem; font-size: 0.75rem;">Unidades</span>
+                                        <span class="badge badge-secondary unidad-label" style="margin-top: 0.5rem; display: block; text-align: center; padding: 0.6rem; font-size: 0.75rem;">${esc(libres[0].unidad)}</span>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Precio Unitario ($) *</label>
-                                        <input type="number" step="0.01" name="items[${editItemIdx}][precio_unitario]" class="form-control" placeholder="0.00" required>
+                                        <input type="number" step="0.01" min="0.01" name="items[${editItemIdx}][precio_unitario]" class="form-control" placeholder="0.00" required>
                                     </div>
                                     <div style="padding-bottom: 5px;">
-                                        <button type="button" class="btn btn-danger btn-sm btn-remove-row" style="margin-top: 1.8rem;">
+                                        <button type="button" class="btn btn-danger btn-sm btn-remove-row" style="margin-top: 1.8rem;" title="Quitar">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></svg>
                                         </button>
                                     </div>
